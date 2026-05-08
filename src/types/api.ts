@@ -92,13 +92,13 @@ export type StreamEvent =
 export interface SpeechRequest {
   model: string;
   text: string;
-  voice_setting: {
-    voice_id: string;
+  voice_setting?: {
+    voice_id?: string;
     speed?: number;
     vol?: number;
     pitch?: number;
   };
-  audio_setting: {
+  audio_setting?: {
     format?: string;
     sample_rate?: number;
     bitrate?: number;
