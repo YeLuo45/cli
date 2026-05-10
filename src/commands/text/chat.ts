@@ -127,8 +127,12 @@ export default defineCommand({
     const model = (flags.model as string)
       || config.defaultTextModel
       || 'MiniMax-M2.7';
-    const shouldStream = flags.stream === true || (flags.stream === undefined && process.stdout.isTTY);
     const format = detectOutputFormat(config.output);
+    const shouldStream = flags.stream === true || (
+      flags.stream === undefined
+      && format !== 'json'
+      && process.stdout.isTTY
+    );
 
     const body: ChatRequest = {
       model,
@@ -190,11 +194,12 @@ export default defineCommand({
       let inThinking = false;
       const dim = config.noColor ? '' : '\x1b[2m';
       const reset = config.noColor ? '' : '\x1b[0m';
+      const isJsonOutput = format === 'json';
       const isTTY = process.stdout.isTTY;
       // In TTY mode, write thinking/response headers to stdout for display.
       // In non-TTY (pipe/agent) mode, write everything but final text to stderr.
-      const statusOut = isTTY ? process.stdout : process.stderr;
-      const resultOut = process.stdout;
+      const statusOut = isTTY && !isJsonOutput ? process.stdout : process.stderr;
+      const resultOut = isJsonOutput ? undefined : process.stdout;
 
       for await (const event of parseSSE(res)) {
         if (event.data === '[DONE]') break;
@@ -212,7 +217,7 @@ export default defineCommand({
           } else if (parsed.type === 'content_block_delta') {
             if (parsed.delta.type === 'text_delta') {
               textContent += parsed.delta.text;
-              resultOut.write(parsed.delta.text);
+              resultOut?.write(parsed.delta.text);
             } else if (parsed.delta.type === 'thinking_delta') {
               statusOut.write(parsed.delta.thinking);
             }
@@ -223,10 +228,11 @@ export default defineCommand({
         }
       }
       if (inThinking) statusOut.write(reset);
-      resultOut.write('\n');
 
       if (format === 'json') {
         console.log(formatOutput({ content: textContent }, format));
+      } else {
+        resultOut?.write('\n');
       }
     } else {
       const response = await requestJson<ChatResponse>(config, {
