@@ -30,12 +30,12 @@ export default defineCommand({
       return;
     }
 
-    if (!response.data || response.data.length === 0) {
+    if (!response.files || response.files.length === 0) {
       process.stdout.write('No files found.\n');
       return;
     }
 
-    const tableData = response.data.map((f) => ({
+    const tableData = response.files.map((f) => ({
       ID: f.file_id,
       FILENAME: f.filename,
       PURPOSE: f.purpose,

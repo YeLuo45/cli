@@ -40,20 +40,21 @@ export default defineCommand({
       return;
     }
 
-    const url = fileDeleteEndpoint(config.baseUrl, fileId);
+    const url = fileDeleteEndpoint(config.baseUrl);
     const response = await requestJson<FileDeleteResponse>(config, {
       url,
-      method: 'DELETE',
+      method: 'POST',
+      body: { file_id: Number(fileId) },
     });
 
     if (config.quiet) {
-      process.stdout.write(response.deleted ? 'deleted\n' : 'failed\n');
+      process.stdout.write('deleted\n');
       return;
     }
 
     process.stdout.write(formatOutput({
-      id: response.id,
-      deleted: response.deleted,
+      file_id: response.file_id,
+      deleted: true,
     }, format) + '\n');
   },
 });
