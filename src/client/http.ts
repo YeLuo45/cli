@@ -62,7 +62,7 @@ export async function request(config: Config, opts: RequestOpts): Promise<Respon
         ? (opts.body as FormData)
         : JSON.stringify(opts.body)
       : undefined,
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: opts.stream ? undefined : AbortSignal.timeout(timeoutMs),
   });
 
   if (config.verbose) {

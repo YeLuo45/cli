@@ -3,12 +3,12 @@ import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { request, requestJson } from '../../client/http';
 import { speechEndpoint } from '../../client/endpoints';
-import { parseSSE } from '../../client/stream';
 import { detectOutputFormat, formatOutput, dryRun } from '../../output/formatter';
 import { saveAudioOutput } from '../../output/audio';
 import { writeFileSync } from 'fs';
 import { readTextFromPathOrStdin } from '../../utils/fs';
 import { T2A_FORMATS, formatList, validateAudioFormat, validateT2AStreaming, t2aDefaultSampleRate } from '../../utils/audio-formats';
+import { pipeAudioStream } from '../../utils/audio-stream';
 import type { Config } from '../../config/schema';
 import type { GlobalFlags } from '../../types/flags';
 import type { SpeechRequest, SpeechResponse } from '../../types/api';
@@ -105,14 +105,7 @@ export default defineCommand({
 
     if (flags.stream) {
       const res = await request(config, { url, method: 'POST', body, stream: true });
-      for await (const event of parseSSE(res)) {
-        if (!event.data || event.data === '[DONE]') break;
-        const parsed = JSON.parse(event.data);
-        const audioHex = parsed?.data?.audio;
-        if (audioHex) {
-          process.stdout.write(Buffer.from(audioHex, 'hex'));
-        }
-      }
+      await pipeAudioStream(res);
       return;
     }
 
