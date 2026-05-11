@@ -1,7 +1,6 @@
 import { Client } from "../client";
 import { speechEndpoint, voicesEndpoint } from "../../client/endpoints";
 import { SpeechRequest, SpeechResponse, VoiceListResponse } from "../../types/api";
-import { parseSSE } from "../../client/stream";
 import { filterByLanguage } from "../../commands/speech/voices";
 import { SDKError } from "../../errors/base";
 import { ExitCode } from "../../errors/codes";
@@ -37,18 +36,7 @@ export class SpeechSDK extends Client {
       stream: true,
     });
 
-    for await (const event of parseSSE(res)) {
-      if (!event.data || event.data === '[DONE]') break;
-      try {
-        const parsed = JSON.parse(event.data) as SpeechResponse;
-        yield parsed;
-      } catch (err) {
-        throw new SDKError(
-          `Failed to parse stream chunk: ${err instanceof Error ? err.message : String(err)}`,
-          ExitCode.GENERAL,
-        );
-      }
-    }
+    yield* this.streamSSE<SpeechResponse>(res);
   }
 
   async voices(language?: string) {

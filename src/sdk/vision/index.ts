@@ -1,6 +1,6 @@
 import { Client } from "../client";
 import { vlmEndpoint } from "../../client/endpoints";
-import { toDataUri } from "../../commands/vision/describe";
+import { toDataUri } from "../../utils/image";
 
 export interface VlmResponse {
   content: string;

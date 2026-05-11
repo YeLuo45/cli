@@ -75,8 +75,8 @@ describe('vision describe --file alias', () => {
     const { default: describeCommand } = await import('../../src/commands/vision/describe');
 
     let output = '';
-    const origWrite = process.stdout.write.bind(process.stdout);
-    (process.stdout as NodeJS.WriteStream).write = (chunk: unknown) => { output += String(chunk); return true; };
+    const origLog = console.log;
+    console.log = (msg: string) => { output += msg; };
 
     try {
       await describeCommand.execute(
@@ -86,7 +86,7 @@ describe('vision describe --file alias', () => {
       const parsed = JSON.parse(output);
       expect(parsed.request.image).toBe('photo.jpg');
     } finally {
-      (process.stdout as NodeJS.WriteStream).write = origWrite;
+      console.log = origLog;
     }
   });
 });

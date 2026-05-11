@@ -4,7 +4,7 @@ import { ExitCode } from '../../errors/codes';
 import { request, requestJson } from '../../client/http';
 import { speechEndpoint } from '../../client/endpoints';
 import { parseSSE } from '../../client/stream';
-import { detectOutputFormat, formatOutput } from '../../output/formatter';
+import { detectOutputFormat, formatOutput, dryRun } from '../../output/formatter';
 import { saveAudioOutput } from '../../output/audio';
 import { writeFileSync } from 'fs';
 import { readTextFromPathOrStdin } from '../../utils/fs';
@@ -65,7 +65,6 @@ export default defineCommand({
     const ext = (flags.format as string) || 'mp3';
     const outPath = (flags.out as string | undefined) ?? `speech_${ts}.${ext}`;
     const outFormat = 'hex';
-    const format = detectOutputFormat(config.output);
 
     const body: SpeechRequest = {
       model,
@@ -96,11 +95,9 @@ export default defineCommand({
       });
     }
 
-    if (config.dryRun) {
-      console.log(formatOutput({ request: body }, format));
-      return;
-    }
+    if (dryRun(config, body)) return;
 
+    const format = detectOutputFormat(config.output);
     const url = speechEndpoint(config.baseUrl);
 
     if (flags.stream) {

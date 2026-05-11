@@ -21,3 +21,9 @@ export function formatOutput(data: unknown, format: OutputFormat): string {
       return formatText(data);
   }
 }
+
+export function dryRun(config: { dryRun?: boolean; output?: string }, body: unknown): boolean {
+  if (!config.dryRun) return false;
+  console.log(formatOutput({ request: body }, detectOutputFormat(config.output)));
+  return true;
+}
