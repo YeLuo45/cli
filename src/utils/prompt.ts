@@ -72,3 +72,25 @@ export function failIfMissing(flagName: string, context: string): never {
     context,
   );
 }
+
+export async function promptOrFail(opts: {
+  value: string | undefined;
+  message: string;
+  cancelMessage: string;
+  flagName: string;
+  usageHint: string;
+  nonInteractive?: boolean;
+}): Promise<string> {
+  if (opts.value) return opts.value;
+
+  if (isInteractive({ nonInteractive: opts.nonInteractive })) {
+    const hint = await promptText({ message: opts.message });
+    if (!hint) {
+      process.stderr.write(opts.cancelMessage + '\n');
+      process.exit(1);
+    }
+    return hint;
+  }
+
+  failIfMissing(opts.flagName, opts.usageHint);
+}

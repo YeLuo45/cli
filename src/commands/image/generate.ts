@@ -4,19 +4,14 @@ import { ExitCode } from '../../errors/codes';
 import { requestJson } from '../../client/http';
 import { imageEndpoint } from '../../client/endpoints';
 import { downloadFile } from '../../files/download';
-import { formatOutput, detectOutputFormat } from '../../output/formatter';
+import { formatOutput, detectOutputFormat, dryRun } from '../../output/formatter';
 import type { Config } from '../../config/schema';
 import type { GlobalFlags } from '../../types/flags';
 import type { ImageRequest, ImageResponse } from '../../types/api';
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join, resolve, extname } from 'path';
-import { isInteractive } from '../../utils/env';
-import { promptText, failIfMissing } from '../../utils/prompt';
-
-const MIME_TYPES: Record<string, string> = {
-  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.png': 'image/png', '.webp': 'image/webp',
-};
+import { mkdirSync, existsSync, writeFileSync } from 'fs';
+import { dirname, join, resolve } from 'path';
+import { localFileToDataUri } from '../../utils/image';
+import { promptOrFail } from '../../utils/prompt';
 
 export default defineCommand({
   name: 'image generate',
@@ -56,20 +51,14 @@ export default defineCommand({
   async run(config: Config, flags: GlobalFlags) {
     let prompt = (flags.prompt ?? (flags._positional as string[]|undefined)?.[0]) as string | undefined;
 
-    if (!prompt) {
-      if (isInteractive({ nonInteractive: config.nonInteractive })) {
-        const hint = await promptText({
-          message: 'Enter your image prompt:',
-        });
-        if (!hint) {
-          process.stderr.write('Image generation cancelled.\n');
-          process.exit(1);
-        }
-        prompt = hint;
-      } else {
-        failIfMissing('prompt', 'mmx image generate --prompt <text>');
-      }
-    }
+    prompt = await promptOrFail({
+      value: prompt,
+      message: 'Enter your image prompt:',
+      cancelMessage: 'Image generation cancelled.',
+      flagName: 'prompt',
+      usageHint: 'mmx image generate --prompt <text>',
+      nonInteractive: config.nonInteractive,
+    });
 
     // Validate width/height
     const width = flags.width as number | undefined;
@@ -132,24 +121,16 @@ export default defineCommand({
         if (params.image.startsWith('http')) {
           ref.image_url = params.image;
         } else {
-          const imgPath = resolve(params.image);
-          const imgData = readFileSync(imgPath);
-          const ext = extname(imgPath).toLowerCase();
-          const mime = MIME_TYPES[ext] || 'image/jpeg';
-          ref.image_file = `data:${mime};base64,${imgData.toString('base64')}`;
+          ref.image_file = localFileToDataUri(resolve(params.image));
         }
       }
 
       body.subject_reference = [ref];
     }
 
+    if (dryRun(config, body)) return;
+
     const format = detectOutputFormat(config.output);
-
-    if (config.dryRun) {
-      console.log(formatOutput({ request: body }, format));
-      return;
-    }
-
     const url = imageEndpoint(config.baseUrl);
     const response = await requestJson<ImageResponse>(config, {
       url,

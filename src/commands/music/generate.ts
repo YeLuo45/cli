@@ -3,7 +3,7 @@ import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import { request, requestJson } from '../../client/http';
 import { musicEndpoint } from '../../client/endpoints';
-import { formatOutput, detectOutputFormat } from '../../output/formatter';
+import { formatOutput, detectOutputFormat, dryRun } from '../../output/formatter';
 import { saveAudioOutput } from '../../output/audio';
 import { readTextFromPathOrStdin } from '../../utils/fs';
 import type { Config } from '../../config/schema';
@@ -122,7 +122,6 @@ export default defineCommand({
     const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
     const ext = (flags.format as string) || 'mp3';
     const outPath = (flags.out as string | undefined) ?? `music_${ts}.${ext}`;
-    const format = detectOutputFormat(config.output);
 
     const model = (flags.model as string) || musicGenerateModel(config);
     const VALID_MODELS = ['music-2.6', 'music-2.6-free', 'music-2.5+', 'music-2.5'];
@@ -165,11 +164,9 @@ export default defineCommand({
 
     if (flags.aigcWatermark) body.aigc_watermark = true;
 
-    if (config.dryRun) {
-      console.log(formatOutput({ request: body }, format));
-      return;
-    }
+    if (dryRun(config, body)) return;
 
+    const format = detectOutputFormat(config.output);
     const url = musicEndpoint(config.baseUrl);
 
     if (flags.stream) {

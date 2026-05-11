@@ -5,19 +5,12 @@ import { requestJson } from '../../client/http';
 import { videoGenerateEndpoint, videoTaskEndpoint, fileRetrieveEndpoint } from '../../client/endpoints';
 import { poll } from '../../polling/poll';
 import { downloadFile, formatBytes } from '../../files/download';
-import { formatOutput, detectOutputFormat } from '../../output/formatter';
+import { formatOutput, detectOutputFormat, dryRun } from '../../output/formatter';
 import type { Config } from '../../config/schema';
 import type { GlobalFlags } from '../../types/flags';
 import type { VideoRequest, VideoResponse, VideoTaskResponse, FileRetrieveResponse } from '../../types/api';
-import { readFileSync } from 'fs';
-import { extname } from 'path';
-
-const MIME_TYPES: Record<string, string> = {
-  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.png': 'image/png', '.webp': 'image/webp',
-};
-import { isInteractive } from '../../utils/env';
-import { promptText, failIfMissing } from '../../utils/prompt';
+import { resolveImageInput } from '../../utils/image';
+import { promptOrFail } from '../../utils/prompt';
 
 export default defineCommand({
   name: 'video generate',
@@ -49,18 +42,14 @@ export default defineCommand({
   async run(config: Config, flags: GlobalFlags) {
     let prompt = flags.prompt as string | undefined;
 
-    if (!prompt) {
-      if (isInteractive({ nonInteractive: config.nonInteractive })) {
-        const hint = await promptText({ message: 'Enter your video prompt:' });
-        if (!hint) {
-          process.stderr.write('Video generation cancelled.\n');
-          process.exit(1);
-        }
-        prompt = hint;
-      } else {
-        failIfMissing('prompt', 'mmx video generate --prompt <text>');
-      }
-    }
+    prompt = await promptOrFail({
+      value: prompt,
+      message: 'Enter your video prompt:',
+      cancelMessage: 'Video generation cancelled.',
+      flagName: 'prompt',
+      usageHint: 'mmx video generate --prompt <text>',
+      nonInteractive: config.nonInteractive,
+    });
 
     // Validate mutually exclusive mode flags
     if (flags.lastFrame && flags.subjectImage) {
@@ -92,7 +81,6 @@ export default defineCommand({
     } else {
       model = config.defaultVideoModel || 'MiniMax-Hailuo-2.3';
     }
-    const format = detectOutputFormat(config.output);
 
     const body: VideoRequest = {
       model,
@@ -101,15 +89,7 @@ export default defineCommand({
 
     // First frame (I2V)
     if (flags.firstFrame) {
-      const framePath = flags.firstFrame as string;
-      if (framePath.startsWith('http')) {
-        body.first_frame_image = framePath;
-      } else {
-        const imgData = readFileSync(framePath);
-        const ext = extname(framePath).toLowerCase();
-        const mime = MIME_TYPES[ext] || 'image/jpeg';
-        body.first_frame_image = `data:${mime};base64,${imgData.toString('base64')}`;
-      }
+      body.first_frame_image = resolveImageInput(flags.firstFrame as string);
     }
 
     // Last frame (SEF mode)
@@ -121,41 +101,21 @@ export default defineCommand({
           'mmx video generate --prompt <text> --first-frame <path> --last-frame <path>',
         );
       }
-      const framePath = flags.lastFrame as string;
-      if (framePath.startsWith('http')) {
-        body.last_frame_image = framePath;
-      } else {
-        const imgData = readFileSync(framePath);
-        const ext = extname(framePath).toLowerCase();
-        const mime = MIME_TYPES[ext] || 'image/jpeg';
-        body.last_frame_image = `data:${mime};base64,${imgData.toString('base64')}`;
-      }
+      body.last_frame_image = resolveImageInput(flags.lastFrame as string);
     }
 
     // Subject reference (S2V mode)
     if (flags.subjectImage) {
-      const imgPath = flags.subjectImage as string;
-      let imageData: string;
-      if (imgPath.startsWith('http')) {
-        imageData = imgPath;
-      } else {
-        const imgData = readFileSync(imgPath);
-        const ext = extname(imgPath).toLowerCase();
-        const mime = MIME_TYPES[ext] || 'image/jpeg';
-        imageData = `data:${mime};base64,${imgData.toString('base64')}`;
-      }
-      body.subject_reference = [{ type: 'character', image: [imageData] }];
+      body.subject_reference = [{ type: 'character', image: [resolveImageInput(flags.subjectImage as string)] }];
     }
 
     if (flags.callbackUrl) {
       body.callback_url = flags.callbackUrl as string;
     }
 
-    if (config.dryRun) {
-      console.log(formatOutput({ request: body }, format));
-      return;
-    }
+    if (dryRun(config, body)) return;
 
+    const format = detectOutputFormat(config.output);
     const url = videoGenerateEndpoint(config.baseUrl);
     const response = await requestJson<VideoResponse>(config, {
       url,

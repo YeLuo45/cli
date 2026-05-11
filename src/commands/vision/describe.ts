@@ -1,55 +1,17 @@
 import { defineCommand } from '../../command';
 import { requestJson } from '../../client/http';
 import { vlmEndpoint } from '../../client/endpoints';
-import { formatOutput, detectOutputFormat } from '../../output/formatter';
+import { formatOutput, detectOutputFormat, dryRun } from '../../output/formatter';
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
 import type { Config } from '../../config/schema';
 import type { GlobalFlags } from '../../types/flags';
-import { readFileSync, existsSync } from 'fs';
-import { extname } from 'path';
 import { isInteractive } from '../../utils/env';
 import { promptText } from '../../utils/prompt';
+import { toDataUri } from '../../utils/image';
 
 interface VlmResponse {
   content: string;
-}
-
-const MIME_TYPES: Record<string, string> = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.webp': 'image/webp',
-};
-
-const MAX_IMAGE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB limit
-
-export async function toDataUri(image: string): Promise<string> {
-  if (image.startsWith('data:')) return image;
-
-  if (image.startsWith('http://') || image.startsWith('https://')) {
-    const res = await fetch(image);
-    if (!res.ok) throw new CLIError(`Failed to download image: HTTP ${res.status}`, ExitCode.GENERAL);
-    const contentType = res.headers.get('content-type') || 'image/jpeg';
-    const mime = contentType.split(';')[0]!.trim();
-    const buf = await res.arrayBuffer();
-    if (buf.byteLength > MAX_IMAGE_SIZE_BYTES) {
-      throw new CLIError(
-        `Image too large (${(buf.byteLength / 1024 / 1024).toFixed(1)} MB). Maximum is 50 MB.`,
-        ExitCode.USAGE,
-      );
-    }
-    const b64 = Buffer.from(buf).toString('base64');
-    return `data:${mime};base64,${b64}`;
-  }
-
-  // Local file
-  if (!existsSync(image)) throw new CLIError(`File not found: ${image}`, ExitCode.USAGE);
-  const ext = extname(image).toLowerCase();
-  const mime = MIME_TYPES[ext];
-  if (!mime) throw new CLIError(`Unsupported image format "${ext}". Supported: jpg, jpeg, png, webp`, ExitCode.USAGE);
-  const buf = readFileSync(image);
-  return `data:${mime};base64,${buf.toString('base64')}`;
 }
 
 export default defineCommand({
@@ -101,13 +63,9 @@ export default defineCommand({
       );
     }
 
+    if (dryRun(config, { prompt, image, fileId })) return;
+
     const format = detectOutputFormat(config.output);
-
-    if (config.dryRun) {
-      process.stdout.write(formatOutput({ request: { prompt, image, fileId } }, format) + '\n');
-      return;
-    }
-
     const url = vlmEndpoint(config.baseUrl);
     const body: Record<string, unknown> = { prompt };
 

@@ -4,7 +4,7 @@ import { MusicRequest, MusicResponse } from "../../types/api";
 import { ModelPartial } from "../types";
 import { SDKError } from "../../errors/base";
 import { ExitCode } from "../../errors/codes";
-import { toMerged } from "es-toolkit";
+import { toMerged } from "es-toolkit/object";
 import { musicGenerateModel } from "../../commands/music/models";
 
 export interface MusicGenerateRequest extends MusicRequest {
