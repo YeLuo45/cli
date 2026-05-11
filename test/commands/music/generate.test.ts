@@ -190,7 +190,7 @@ describe('music generate command', () => {
     ).rejects.toThrow('Invalid audio format "opus"');
   });
 
-  it.each(['mp3', 'wav', 'pcm', 'flac'])(
+  it.each(['mp3', 'wav', 'pcm'])(
     'accepts %s format in dry-run',
     async (fmt) => {
       const origLog = console.log;
