@@ -274,7 +274,7 @@ export interface FileUploadResponse {
 
 export interface FileListResponse {
   base_resp: BaseResp;
-  data: Array<{
+  files: Array<{
     file_id: string;
     bytes: number;
     created_at: number;
@@ -285,9 +285,7 @@ export interface FileListResponse {
 
 export interface FileDeleteResponse {
   base_resp: BaseResp;
-  id: string;
-  object: string;
-  deleted: boolean;
+  file_id: number;
 }
 
 export interface FileRetrieveResponse {

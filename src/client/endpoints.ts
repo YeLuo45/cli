@@ -49,9 +49,9 @@ export function fileUploadEndpoint(baseUrl: string): string {
 }
 
 export function fileListEndpoint(baseUrl: string): string {
-  return `${baseUrl}/v1/files`;
+  return `${baseUrl}/v1/files/list`;
 }
 
-export function fileDeleteEndpoint(baseUrl: string, fileId: string): string {
-  return `${baseUrl}/v1/files?file_id=${encodeURIComponent(fileId)}`;
+export function fileDeleteEndpoint(baseUrl: string): string {
+  return `${baseUrl}/v1/files/delete`;
 }

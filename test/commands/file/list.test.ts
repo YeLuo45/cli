@@ -71,7 +71,7 @@ describe('file list command', () => {
   it('shows empty state when no files are returned', async () => {
     server = createMockServer({
       routes: {
-        '/v1/files': () => jsonResponse({ base_resp: { status_code: 0, status_msg: '' }, data: [] }),
+        '/v1/files/list': () => jsonResponse({ base_resp: { status_code: 0, status_msg: '' }, files: [] }),
       },
     });
 
@@ -85,9 +85,9 @@ describe('file list command', () => {
   it('prints JSON output for file list responses', async () => {
     server = createMockServer({
       routes: {
-        '/v1/files': () => jsonResponse({
+        '/v1/files/list': () => jsonResponse({
           base_resp: { status_code: 0, status_msg: '' },
-          data: [{
+          files: [{
             file_id: 'file-123',
             bytes: 2048,
             created_at: 1700000000,
@@ -103,7 +103,7 @@ describe('file list command', () => {
     });
 
     const parsed = JSON.parse(output);
-    expect(parsed.data[0].file_id).toBe('file-123');
-    expect(parsed.data[0].filename).toBe('doc.pdf');
+    expect(parsed.files[0].file_id).toBe('file-123');
+    expect(parsed.files[0].filename).toBe('doc.pdf');
   });
 });

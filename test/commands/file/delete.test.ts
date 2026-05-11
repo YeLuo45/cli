@@ -79,19 +79,17 @@ describe('file delete command', () => {
     expect(parsed.request.delete_file).toBe('file-123');
   });
 
-  it('sends DELETE request and prints result', async () => {
+  it('sends POST request to delete endpoint', async () => {
     let method = '';
-    let fileId = '';
+    let body: Record<string, unknown> = {};
     server = createMockServer({
       routes: {
-        '/v1/files': (req) => {
+        '/v1/files/delete': async (req) => {
           method = req.method;
-          fileId = new URL(req.url).searchParams.get('file_id') ?? '';
+          body = await req.json() as Record<string, unknown>;
           return jsonResponse({
             base_resp: { status_code: 0, status_msg: '' },
-            id: fileId,
-            object: 'file',
-            deleted: true,
+            file_id: 123,
           });
         },
       },
@@ -100,24 +98,22 @@ describe('file delete command', () => {
     const output = await captureStdout(async () => {
       await deleteCommand.execute(makeConfig({ baseUrl: server.url, output: 'json' }), {
         ...baseFlags,
-        fileId: 'file-123',
+        fileId: '123',
       });
     });
 
     const parsed = JSON.parse(output);
-    expect(method).toBe('DELETE');
-    expect(fileId).toBe('file-123');
-    expect(parsed).toEqual({ id: 'file-123', deleted: true });
+    expect(method).toBe('POST');
+    expect(body.file_id).toBe(123);
+    expect(parsed).toEqual({ file_id: 123, deleted: true });
   });
 
   it('prints compact status in quiet mode', async () => {
     server = createMockServer({
       routes: {
-        '/v1/files': () => jsonResponse({
+        '/v1/files/delete': () => jsonResponse({
           base_resp: { status_code: 0, status_msg: '' },
-          id: 'file-123',
-          object: 'file',
-          deleted: true,
+          file_id: 123,
         }),
       },
     });
