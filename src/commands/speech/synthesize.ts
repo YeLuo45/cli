@@ -8,6 +8,7 @@ import { detectOutputFormat, formatOutput, dryRun } from '../../output/formatter
 import { saveAudioOutput } from '../../output/audio';
 import { writeFileSync } from 'fs';
 import { readTextFromPathOrStdin } from '../../utils/fs';
+import { T2A_FORMATS, formatList, validateAudioFormat, validateT2AStreaming } from '../../utils/audio-formats';
 import type { Config } from '../../config/schema';
 import type { GlobalFlags } from '../../types/flags';
 import type { SpeechRequest, SpeechResponse } from '../../types/api';
@@ -25,7 +26,7 @@ export default defineCommand({
     { flag: '--speed <n>',               description: 'Speech speed multiplier', type: 'number' },
     { flag: '--volume <n>',              description: 'Volume level', type: 'number' },
     { flag: '--pitch <n>',               description: 'Pitch adjustment', type: 'number' },
-    { flag: '--format <fmt>',            description: 'Audio format (default: mp3)' },
+    { flag: '--format <fmt>',            description: `Audio format: ${formatList(T2A_FORMATS)} (default: mp3)` },
     { flag: '--sample-rate <hz>',        description: 'Sample rate (default: 32000)', type: 'number' },
     { flag: '--bitrate <bps>',           description: 'Bitrate (default: 128000)', type: 'number' },
     { flag: '--channels <n>',            description: 'Audio channels (default: 1)', type: 'number' },
@@ -63,6 +64,8 @@ export default defineCommand({
     const voice = (flags.voice as string) || 'English_expressive_narrator';
     const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
     const ext = (flags.format as string) || 'mp3';
+    validateAudioFormat(ext, T2A_FORMATS);
+    validateT2AStreaming(ext, flags.stream === true);
     const outPath = (flags.out as string | undefined) ?? `speech_${ts}.${ext}`;
     const outFormat = 'hex';
 

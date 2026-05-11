@@ -192,8 +192,8 @@ describe('refreshAccessToken: timeout and error handling', () => {
 // ---------------------------------------------------------------------------
 
 describe('handleError: timeout message includes region/auth hint', () => {
-  it('AbortError message contains region override hint', () => {
-    const { handleError } = require('../../src/errors/handler');
+  it('AbortError message contains region override hint', async () => {
+    const { handleError } = await import('../../src/errors/handler');
 
     const abortErr = new DOMException('The operation was aborted.', 'AbortError');
 

@@ -231,7 +231,7 @@ describe('parseSSE', () => {
 
     // First request — consume all events
     const response1 = await fetch(`${server.url}/stream`);
-    for await (const _ of parseSSE(response1)) { /* consume */ }
+    for await (const _event of parseSSE(response1)) { void _event; }
 
     // Second request — should work since lock released
     const response2 = await fetch(`${server.url}/stream`);

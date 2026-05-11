@@ -203,3 +203,60 @@ describe('speech synthesize command', () => {
     }
   });
 });
+
+describe('speech synthesize format validation', () => {
+  const config = {
+    apiKey: 'test-key',
+    region: 'global' as const,
+    baseUrl: 'https://api.mmx.io',
+    output: 'json' as const,
+    timeout: 10,
+    verbose: false,
+    quiet: false,
+    noColor: true,
+    yes: false,
+    dryRun: true,
+    nonInteractive: true,
+    async: false,
+  };
+
+  const flags = {
+    text: 'Hello',
+    quiet: false,
+    verbose: false,
+    noColor: true,
+    yes: false,
+    dryRun: true,
+    help: false,
+    nonInteractive: true,
+    async: false,
+  };
+
+  it('rejects invalid audio format', async () => {
+    await expect(
+      synthesizeCommand.execute(config, { ...flags, format: 'aac' }),
+    ).rejects.toThrow('Invalid audio format "aac"');
+  });
+
+  it.each(['mp3', 'pcm', 'flac', 'wav', 'pcmu_raw', 'pcmu_wav', 'opus'])(
+    'accepts %s format in dry-run',
+    async (fmt) => {
+      const originalLog = console.log;
+      let output = '';
+      console.log = (msg: string) => { output += msg; };
+      try {
+        await synthesizeCommand.execute(config, { ...flags, format: fmt });
+        const parsed = JSON.parse(output);
+        expect(parsed.request.audio_setting.format).toBe(fmt);
+      } finally {
+        console.log = originalLog;
+      }
+    },
+  );
+
+  it('rejects wav in streaming mode', async () => {
+    await expect(
+      synthesizeCommand.execute(config, { ...flags, format: 'wav', stream: true }),
+    ).rejects.toThrow('wav format is not supported in streaming');
+  });
+});

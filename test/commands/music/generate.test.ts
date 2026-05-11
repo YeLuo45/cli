@@ -180,4 +180,32 @@ describe('music generate command', () => {
     const parsed = JSON.parse(captured);
     expect(parsed.request.model).toBe('music-2.5');
   });
+
+  it('rejects invalid audio format', async () => {
+    await expect(
+      generateCommand.execute(
+        { ...baseConfig, dryRun: true },
+        { ...baseFlags, dryRun: true, prompt: 'Folk', lyrics: 'la la', format: 'opus' },
+      ),
+    ).rejects.toThrow('Invalid audio format "opus"');
+  });
+
+  it.each(['mp3', 'wav', 'pcm', 'flac'])(
+    'accepts %s format in dry-run',
+    async (fmt) => {
+      const origLog = console.log;
+      let captured = '';
+      console.log = (msg: string) => { captured += msg; };
+      try {
+        await generateCommand.execute(
+          { ...baseConfig, dryRun: true, output: 'json' as const },
+          { ...baseFlags, dryRun: true, prompt: 'Folk', lyrics: 'la la', format: fmt },
+        );
+        const parsed = JSON.parse(captured);
+        expect(parsed.request.audio_setting.format).toBe(fmt);
+      } finally {
+        console.log = origLog;
+      }
+    },
+  );
 });
