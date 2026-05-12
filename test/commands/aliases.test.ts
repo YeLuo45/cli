@@ -8,6 +8,13 @@ describe('command aliases', () => {
     expect(web.command).toBe(query.command);
   });
 
+  it('auto-forwards search shorthand when child commands are aliases', () => {
+    const shorthand = registry.resolve(['search', 'MiniMax AI latest news']);
+    const query = registry.resolve(['search', 'query']);
+    expect(shorthand.command).toBe(query.command);
+    expect(shorthand.extra).toEqual(['MiniMax AI latest news']);
+  });
+
   it('resolves "speech generate" same as "speech synthesize"', () => {
     const generate = registry.resolve(['speech', 'generate']);
     const synthesize = registry.resolve(['speech', 'synthesize']);
