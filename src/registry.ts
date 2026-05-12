@@ -91,6 +91,18 @@ class CommandRegistry {
       }
     }
 
+    // Alias-only group: auto-forward when every child points to the same command.
+    // Example: `mmx search "query"` should work even when both `search query`
+    // and `search web` are registered as aliases for the same implementation.
+    if (matched.length > 0 && node.children.size > 1) {
+      const children = Array.from(node.children.values());
+      const commands = children.map((child) => child.command);
+      const first = commands[0];
+      if (first && commands.every((command) => command === first)) {
+        return { command: first, extra: commandPath.slice(matched.length) };
+      }
+    }
+
     // If we matched some path but no command, show help for that group
     if (matched.length > 0 && node.children.size > 0) {
       const subcommands = Array.from(node.children.entries())
