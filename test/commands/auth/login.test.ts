@@ -7,7 +7,7 @@ describe('auth login command', () => {
     expect(loginCommand.description).toContain('Authenticate');
   });
 
-  it('requires api key when method is api-key', async () => {
+  it('requires api key in non-interactive mode', async () => {
     const config = {
       region: 'global' as const,
       baseUrl: 'https://api.mmx.io',
@@ -24,7 +24,6 @@ describe('auth login command', () => {
 
     await expect(
       loginCommand.execute(config, {
-        method: 'api-key',
         quiet: false,
         verbose: false,
         noColor: true,
