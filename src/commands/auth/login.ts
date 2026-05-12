@@ -11,6 +11,7 @@ import { readConfigFile, writeConfigFile } from '../../config/loader';
 import { isInteractive } from '../../utils/env';
 import { maskToken } from '../../utils/token';
 import type { Config, Region } from '../../config/schema';
+import { REGIONS } from '../../config/schema';
 import type { GlobalFlags } from '../../types/flags';
 import type { QuotaResponse, QuotaModelRemain } from '../../types/api';
 
@@ -26,6 +27,17 @@ async function showQuotaAfterLogin(config: Config): Promise<void> {
   } catch {
     // Non-fatal — login succeeded, quota display is best-effort
   }
+}
+
+/**
+ * Mirrors the `mmx` (no-args) dashboard: prints the help panel
+ * followed by the quota snapshot. Used right after a successful
+ * login so the user lands somewhere useful instead of an empty prompt.
+ */
+async function showDashboardAfterLogin(config: Config): Promise<void> {
+  const { registry } = await import('../../registry');
+  registry.printHelp([], process.stderr, config.region);
+  await showQuotaAfterLogin(config);
 }
 
 export default defineCommand({
@@ -92,9 +104,14 @@ export default defineCommand({
     const region: Region = (flags.region as Region) || (choice === 'oauth-cn' ? 'cn' : 'global');
     await runOAuthLogin(region);
 
-    // Best-effort quota snapshot — derive an effective baseUrl from the OAuth region.
-    const cfg: Config = { ...config, region, baseUrl: config.baseUrl };
-    await showQuotaAfterLogin(cfg);
+    // Reload config so the OAuth subobject (and its resource_url) are picked up.
+    const fresh = readConfigFile();
+    const cfg: Config = {
+      ...config,
+      region,
+      baseUrl: fresh.oauth?.resource_url || REGIONS[region],
+    };
+    await showDashboardAfterLogin(cfg);
   },
 });
 
@@ -122,5 +139,5 @@ async function loginWithApiKey(config: Config, key: string): Promise<void> {
   await writeConfigFile(existing);
   process.stderr.write(`API key saved to ${getConfigPath()}\n`);
 
-  await showQuotaAfterLogin({ ...config, apiKey: key });
+  await showDashboardAfterLogin({ ...config, apiKey: key });
 }

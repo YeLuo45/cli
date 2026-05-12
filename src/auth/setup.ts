@@ -11,13 +11,12 @@ import { saveCredentials, loadCredentials } from './credentials';
 interface AuthChoice {
   value: 'oauth-global' | 'oauth-cn' | 'api-key';
   label: string;
-  hint: string;
 }
 
 const AUTH_CHOICES: AuthChoice[] = [
-  { value: 'oauth-global', label: 'MiniMax',   hint: 'OAuth login (Global)' },
-  { value: 'oauth-cn',     label: 'MiniMaxCN', hint: 'OAuth login (China)' },
-  { value: 'api-key',      label: 'API key',   hint: 'Paste sk-cp-... or sk-...' },
+  { value: 'oauth-global', label: 'MiniMax (OAuth login, Global)' },
+  { value: 'oauth-cn',     label: 'MiniMax (OAuth login, China)' },
+  { value: 'api-key',      label: 'API key' },
 ];
 
 export async function ensureAuth(config: Config): Promise<void> {
@@ -61,7 +60,7 @@ export async function pickAuthMethod(): Promise<AuthChoice['value']> {
   const { select, isCancel } = await import('@clack/prompts');
   const value = await select({
     message: 'How would you like to authenticate?',
-    options: AUTH_CHOICES.map(c => ({ value: c.value, label: `${c.label}  ·  ${c.hint}` })),
+    options: AUTH_CHOICES.map(c => ({ value: c.value, label: c.label })),
   });
   if (isCancel(value)) throw new CLIError('Authentication cancelled.', ExitCode.AUTH);
   return value as AuthChoice['value'];

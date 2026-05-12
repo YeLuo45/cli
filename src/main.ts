@@ -75,7 +75,7 @@ async function main() {
       await quotaCmd.execute(config, flags);
     } else {
       process.stderr.write('  Not logged in.\n');
-      process.stderr.write('  mmx auth login              Choose MiniMax / MiniMaxCN OAuth or paste an API key\n');
+      process.stderr.write('  mmx auth login              Choose MiniMax OAuth (Global/China) or paste an API key\n');
       process.stderr.write('  mmx auth login --api-key    Save an API key directly\n\n');
     }
     process.exit(0);
