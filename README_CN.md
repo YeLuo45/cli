@@ -45,7 +45,10 @@ npm install -g mmx-cli
 ## 快速开始
 
 ```bash
-# 认证
+# 认证（交互式 — 选 MiniMax OAuth 或粘 API Key）
+mmx auth login
+
+# 或者非交互
 mmx auth login --api-key sk-xxxxx
 
 # 开始创作
@@ -130,16 +133,20 @@ mmx search query --q "最新动态" --output json
 ### `mmx auth`
 
 ```bash
-mmx auth login --api-key sk-xxxxx
-mmx auth login                    # OAuth 浏览器授权
+mmx auth login                              # 交互式：选 OAuth (Global / 中国) 或粘 API Key
+mmx auth login --api-key sk-xxxxx           # 直接保存 API Key
+mmx auth login --recommend                  # 跳过 3 选 1 菜单，弹出 region 选择器
+mmx auth login --recommend --region=global  # 直接 OAuth → api.minimax.io
+mmx auth login --recommend --region=cn      # 直接 OAuth → api.minimaxi.com
 mmx auth status
 mmx auth refresh
 mmx auth logout
 ```
 
-请使用 `mmx auth status` 作为认证状态的权威检查方式。`~/.mmx/credentials.json`
-只在 OAuth 登录时存在；API Key 登录会写入 `~/.mmx/config.json`（也可每次通过
-`--api-key` 直接传入）。
+请使用 `mmx auth status` 作为认证状态的权威检查方式。OAuth 与 API Key 凭据
+都保存在 `~/.mmx/config.json` 里，**两者互斥** —— 用一种登录会清掉另一种。
+也可以每次通过 `--api-key` 直接传入。使用 API Key 登录时，会自动同时探测
+Global 与中国两个 region，选用能通过的那个。
 
 ### `mmx config` · `mmx quota`
 
