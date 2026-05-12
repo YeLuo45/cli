@@ -20,12 +20,16 @@ function tildePath(p: string): string {
   return p.startsWith(homedir()) ? p.replace(homedir(), '~') : p;
 }
 
+function stripScheme(url: string): string {
+  return url.replace(/^https?:\/\//, '');
+}
+
 export function maybeShowStatusBar(config: Config, token: string, model?: string): void {
   if (config.quiet || printed || !process.stderr.isTTY) return;
   printed = true;
 
   const filePath   = config.configPath ? tildePath(config.configPath) : '~/.mmx/config.json';
-  const regionSrc  = config.fileRegion ? `${config.fileRegion} (file)` : 'global (default)';
+  const baseUrlStr = stripScheme(config.baseUrl);
   const keySrc     = config.apiKey ? '(flag)' : '(file)';
   const maskedKey  = maskToken(token);
   const modelStr   = model ? ` ${dim}|${reset} ${dim}Model:${reset} ${mmPurple}${model}${reset}` : '';
@@ -34,7 +38,7 @@ export function maybeShowStatusBar(config: Config, token: string, model?: string
     `${bold}${mmBlue}MINIMAX${reset} ` +
     `${dim}${filePath}${reset} ` +
     `${dim}|${reset} ` +
-    `${dim}Region:${reset} ${mmCyan}${regionSrc}${reset} ` +
+    `${dim}URL:${reset} ${mmCyan}${baseUrlStr}${reset} ` +
     `${dim}|${reset} ` +
     `${dim}Key:${reset} ${mmPink}${maskedKey}${reset} ${dim}${keySrc}${reset}` +
     `${modelStr}\n`,

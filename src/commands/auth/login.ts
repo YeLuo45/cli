@@ -1,10 +1,11 @@
 import { defineCommand } from '../../command';
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
-import { pickAuthMethod, runOAuthLogin } from '../../auth/setup';
+import { pickAuthMethod, pickOAuthRegion, runOAuthLogin } from '../../auth/setup';
 import { requestJson } from '../../client/http';
 import { quotaEndpoint } from '../../client/endpoints';
 import { renderQuotaTable } from '../../output/quota-table';
+import { detectRegion } from '../../config/detect-region';
 
 import { getConfigPath } from '../../config/paths';
 import { readConfigFile, writeConfigFile } from '../../config/loader';
@@ -13,7 +14,7 @@ import { maskToken } from '../../utils/token';
 import type { Config, Region } from '../../config/schema';
 import { REGIONS } from '../../config/schema';
 import type { GlobalFlags } from '../../types/flags';
-import type { QuotaResponse, QuotaModelRemain } from '../../types/api';
+import type { QuotaModelRemain } from '../../types/api';
 
 interface QuotaApiResponse {
   model_remains: QuotaModelRemain[];
@@ -43,14 +44,17 @@ async function showDashboardAfterLogin(config: Config): Promise<void> {
 export default defineCommand({
   name: 'auth login',
   description: 'Authenticate via OAuth or API key',
-  usage: 'mmx auth login [--api-key <key>] [--region global|cn]',
+  usage: 'mmx auth login [--api-key <key>] [--recommend] [--region=global|cn]',
   options: [
     { flag: '--api-key <key>', description: 'Skip the menu and save this API key directly' },
+    { flag: '--recommend',     description: 'Skip the menu, go straight to OAuth (combine with --region= to skip the region picker)' },
   ],
   examples: [
     'mmx auth login',
     'mmx auth login --api-key sk-cp-xxxxx',
-    'mmx auth login --region cn',
+    'mmx auth login --recommend',
+    'mmx auth login --recommend --region=global',
+    'mmx auth login --recommend --region=cn',
   ],
   async run(config: Config, flags: GlobalFlags) {
     const envKey = process.env.MINIMAX_API_KEY;
@@ -89,6 +93,14 @@ export default defineCommand({
       );
     }
 
+    // --recommend: skip the 3-option menu, go straight to OAuth.
+    // With --region, skip the region picker too.
+    if (flags.recommend) {
+      const region = (flags.region as Region) || await pickOAuthRegion();
+      await completeOAuthLogin(config, region);
+      return;
+    }
+
     const choice = await pickAuthMethod();
     if (choice === 'api-key') {
       const { text, isCancel } = await import('@clack/prompts');
@@ -102,18 +114,22 @@ export default defineCommand({
     }
 
     const region: Region = (flags.region as Region) || (choice === 'oauth-cn' ? 'cn' : 'global');
-    await runOAuthLogin(region);
-
-    // Reload config so the OAuth subobject (and its resource_url) are picked up.
-    const fresh = readConfigFile();
-    const cfg: Config = {
-      ...config,
-      region,
-      baseUrl: fresh.oauth?.resource_url || REGIONS[region],
-    };
-    await showDashboardAfterLogin(cfg);
+    await completeOAuthLogin(config, region);
   },
 });
+
+async function completeOAuthLogin(config: Config, region: Region): Promise<void> {
+  await runOAuthLogin(region);
+
+  // Reload so the OAuth subobject (and any resource_url override) is picked up.
+  const fresh = readConfigFile();
+  const cfg: Config = {
+    ...config,
+    region,
+    baseUrl: fresh.oauth?.resource_url || REGIONS[region],
+  };
+  await showDashboardAfterLogin(cfg);
+}
 
 async function loginWithApiKey(config: Config, key: string): Promise<void> {
   if (config.dryRun) {
@@ -121,11 +137,15 @@ async function loginWithApiKey(config: Config, key: string): Promise<void> {
     return;
   }
 
-  process.stderr.write('Testing key... ');
+  // Probe both regions and pick the one the key actually authenticates against.
+  // This doubles as key validation — if neither region accepts it, the key is bad.
+  const detected = await detectRegion(key);
+  const cfg: Config = { ...config, region: detected, baseUrl: REGIONS[detected], apiKey: key };
+
+  // Verify the detection actually authorizes the quota endpoint (defends against
+  // detectRegion's graceful 'global' fallback when the network is unreachable).
   try {
-    const test = { ...config, apiKey: key };
-    await requestJson<QuotaResponse>(test, { url: quotaEndpoint(test.baseUrl) });
-    process.stderr.write('Valid\n');
+    await requestJson<QuotaApiResponse>(cfg, { url: quotaEndpoint(cfg.baseUrl) });
   } catch {
     throw new CLIError(
       'API key validation failed.',
@@ -134,10 +154,13 @@ async function loginWithApiKey(config: Config, key: string): Promise<void> {
     );
   }
 
+  // OAuth and api_key are mutually exclusive — drop any stale oauth block.
   const existing = readConfigFile() as Record<string, unknown>;
+  delete existing.oauth;
   existing.api_key = key;
+  existing.region = detected;
   await writeConfigFile(existing);
   process.stderr.write(`API key saved to ${getConfigPath()}\n`);
 
-  await showDashboardAfterLogin({ ...config, apiKey: key });
+  await showDashboardAfterLogin(cfg);
 }
