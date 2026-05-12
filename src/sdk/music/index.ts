@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
 import { Client } from "../client";
 import { musicEndpoint } from "../../client/endpoints";
 import { MusicRequest, MusicResponse } from "../../types/api";
@@ -6,6 +8,21 @@ import { SDKError } from "../../errors/base";
 import { ExitCode } from "../../errors/codes";
 import { toMerged } from "es-toolkit/object";
 import { musicGenerateModel } from "../../commands/music/models";
+
+function hexToBuffer(hex: string): Buffer {
+  if (!/^[0-9a-fA-F]*$/.test(hex)) {
+    throw new SDKError('API returned invalid audio data (not valid hex).', ExitCode.GENERAL);
+  }
+  if (hex.length % 2 !== 0) {
+    throw new SDKError('API returned truncated audio data (odd-length hex string).', ExitCode.GENERAL);
+  }
+  return Buffer.from(hex, 'hex');
+}
+
+function defaultFilename(prefix: string, ext: string): string {
+  const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+  return `${prefix}_${ts}.${ext}`;
+}
 
 export interface MusicGenerateRequest extends MusicRequest {
   /** Vocal style, e.g. "warm male baritone", "bright female soprano", "duet with harmonies" */
@@ -79,6 +96,38 @@ export class MusicSDK extends Client {
       method: 'POST',
       body,
     });
+  }
+
+  /**
+   * Save generated music audio to a file. Decodes the hex-encoded audio
+   * from the API response and writes it to disk. Creates intermediate
+   * directories as needed.
+   *
+   * @param response — The response from `generate()`.
+   * @param outPath  — Target file path. Defaults to `music_<timestamp>.mp3`.
+   * @param ext      — File extension (default: `"mp3"`).
+   * @returns The absolute path of the saved file.
+   */
+  save(response: MusicResponse, outPath?: string, ext = 'mp3'): string {
+    const dest = resolve(outPath || defaultFilename('music', ext));
+    const audioHex = response.data.audio;
+    if (!audioHex) {
+      throw new SDKError('API response missing audio data.', ExitCode.GENERAL);
+    }
+
+    const dir = dirname(dest);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+    try {
+      writeFileSync(dest, hexToBuffer(audioHex));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOSPC') {
+        throw new SDKError('Disk full — cannot write audio file.', ExitCode.GENERAL);
+      }
+      throw err;
+    }
+
+    return dest;
   }
 
   private buildPrompt(request: ModelPartial<MusicGenerateRequest>) {
