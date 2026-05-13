@@ -1,207 +1,134 @@
-import type { OAuthTokens } from './types';
+import type { OAuthCredentials, Region } from '../config/schema';
+import { OAUTH_HOSTS } from '../config/schema';
 import { CLIError } from '../errors/base';
 import { ExitCode } from '../errors/codes';
 
-// OAuth configuration — exact endpoints TBD pending MiniMax OAuth docs
-export interface OAuthConfig {
-  clientId: string;
-  authorizationUrl: string;
-  tokenUrl: string;
-  deviceCodeUrl: string;
-  scopes: string[];
-  callbackPort: number;
+const CLIENT_ID = '659cf4c1-615c-45f6-a5f6-4bf15eb476e5';
+const CLIENT_NAME = 'MiniMax CLI';
+const SCOPES = ['openid', 'profile', 'coding_plan'];
+
+interface DeviceCodeResponse {
+  base_resp?: { status_code: number; status_msg?: string };
+  user_code: string;
+  verification_uri: string;
+  expired_in: number;   // absolute Unix ms (server's name; unfortunate)
+  interval: number;     // poll interval in ms
+  state: string;
 }
 
-const DEFAULT_OAUTH_CONFIG: OAuthConfig = {
-  clientId: 'mmx-cli',
-  authorizationUrl: 'https://platform.minimax.io/oauth/authorize',
-  tokenUrl: 'https://api.minimax.io/v1/oauth/token',
-  deviceCodeUrl: 'https://api.minimax.io/v1/oauth/device/code',
-  scopes: ['api'],
-  callbackPort: 18991,
-};
+interface TokenResponse {
+  base_resp?: { status_code: number; status_msg?: string };
+  status: 'pending' | 'success' | string;
+  access_token?: string;
+  refresh_token?: string;
+  expired_in?: number;  // absolute Unix ms
+  resource_url?: string;
+}
 
-export async function startBrowserFlow(
-  config: OAuthConfig = DEFAULT_OAUTH_CONFIG,
-): Promise<OAuthTokens> {
+/**
+ * Run the OAuth 2.0 Device Authorization Grant against the MiniMax
+ * account server for the given region (RFC 8628 + PKCE).
+ *
+ * Opens the user's browser to the verification URL, displays the
+ * user code, and polls /oauth2/token until the user approves.
+ */
+export async function deviceCodeLogin(region: Region): Promise<OAuthCredentials> {
+  const host = OAUTH_HOSTS[region];
+
   const { randomBytes, createHash } = await import('crypto');
   const codeVerifier = randomBytes(32).toString('base64url');
-  const codeChallenge = createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64url');
+  const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
+  const state = randomBytes(16).toString('base64url');
 
-  const state = randomBytes(16).toString('hex');
-
-  const params = new URLSearchParams({
-    client_id: config.clientId,
-    response_type: 'code',
-    redirect_uri: `http://localhost:${config.callbackPort}/callback`,
-    scope: config.scopes.join(' '),
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
-  });
-
-  const authUrl = `${config.authorizationUrl}?${params}`;
-
-  // Open browser using execFile/spawn instead of exec to prevent shell injection.
-  // exec() passes the string to a shell, so a crafted authUrl containing shell
-  // metacharacters (e.g. from a malicious authorization server redirect) could
-  // execute arbitrary commands. execFile/spawn bypass the shell entirely. (#79)
-  const { execFile, spawn } = await import('child_process');
-  const platform = process.platform;
-
-  if (platform === 'darwin') {
-    execFile('open', [authUrl]);
-  } else if (platform === 'win32') {
-    // On Windows, 'start' is a shell built-in — use cmd.exe /c start explicitly.
-    spawn('cmd.exe', ['/c', 'start', '', authUrl], { shell: false, detached: true });
-  } else {
-    execFile('xdg-open', [authUrl]);
-  }
-  process.stderr.write('Opening browser to authenticate with MiniMax...\n');
-
-  // Start local server to receive callback
-  const code = await waitForCallback(config.callbackPort, state);
-
-  // Exchange code for tokens
-  const tokenRes = await fetch(config.tokenUrl, {
+  const codeRes = await fetch(`${host}/oauth2/device/code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      client_id: config.clientId,
-      redirect_uri: `http://localhost:${config.callbackPort}/callback`,
-      code_verifier: codeVerifier,
-    }),
-  });
-
-  if (!tokenRes.ok) {
-    const body = await tokenRes.text();
-    throw new CLIError(
-      `OAuth token exchange failed: ${body}`,
-      ExitCode.AUTH,
-    );
-  }
-
-  return (await tokenRes.json()) as OAuthTokens;
-}
-
-async function waitForCallback(port: number, expectedState: string): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      server.stop();
-      reject(new CLIError('OAuth callback timed out.', ExitCode.TIMEOUT));
-    }, 120_000);
-
-    const server = Bun.serve({
-      port,
-      fetch(req) {
-        const url = new URL(req.url);
-        if (url.pathname !== '/callback') {
-          return new Response('Not found', { status: 404 });
-        }
-
-        const code = url.searchParams.get('code');
-        const state = url.searchParams.get('state');
-        const error = url.searchParams.get('error');
-
-        if (error) {
-          clearTimeout(timeout);
-          server.stop();
-          reject(new CLIError(`OAuth error: ${error}`, ExitCode.AUTH));
-          return new Response(
-            '<html><body><h1>Authentication Failed</h1><p>You can close this tab.</p></body></html>',
-            { headers: { 'Content-Type': 'text/html' } },
-          );
-        }
-
-        if (!code || state !== expectedState) {
-          clearTimeout(timeout);
-          server.stop();
-          reject(new CLIError('Invalid OAuth callback.', ExitCode.AUTH));
-          return new Response('Invalid callback', { status: 400 });
-        }
-
-        clearTimeout(timeout);
-        server.stop();
-        resolve(code);
-        return new Response(
-          '<html><body><h1>Authentication Successful</h1><p>You can close this tab.</p></body></html>',
-          { headers: { 'Content-Type': 'text/html' } },
-        );
-      },
-    });
-  });
-}
-
-export async function startDeviceCodeFlow(
-  config: OAuthConfig = DEFAULT_OAUTH_CONFIG,
-): Promise<OAuthTokens> {
-  // Request device code
-  const codeRes = await fetch(config.deviceCodeUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      scope: config.scopes.join(' '),
+      client_id: CLIENT_ID,
+      scope: SCOPES.join(' '),
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+      state,
     }),
   });
 
   if (!codeRes.ok) {
+    const body = await codeRes.text().catch(() => '');
     throw new CLIError(
-      'Failed to start device code flow.',
+      `Failed to start device-code flow (HTTP ${codeRes.status}).`,
       ExitCode.AUTH,
+      body || `URL: ${host}/oauth2/device/code`,
     );
   }
 
-  const { device_code, user_code, verification_uri, interval, expires_in } =
-    (await codeRes.json()) as {
-      device_code: string;
-      user_code: string;
-      verification_uri: string;
-      interval: number;
-      expires_in: number;
-    };
+  const data = (await codeRes.json()) as DeviceCodeResponse;
+  if (data.state !== state) {
+    throw new CLIError('OAuth state mismatch.', ExitCode.AUTH);
+  }
 
-  process.stderr.write(`\nVisit: ${verification_uri}\n`);
-  process.stderr.write(`Enter code: ${user_code}\n`);
+  openBrowser(data.verification_uri);
+  process.stderr.write(`\nOpened: ${data.verification_uri}\n`);
+  process.stderr.write(`Code:   ${data.user_code}\n`);
+  process.stderr.write(`Client: ${CLIENT_NAME}\n`);
   process.stderr.write('Waiting for authorization...\n');
 
-  // Poll for authorization
-  const deadline = Date.now() + expires_in * 1000;
-  const pollInterval = (interval || 5) * 1000;
+  const deadline = data.expired_in;
+  const intervalMs = data.interval || 3000;
 
   while (Date.now() < deadline) {
-    await new Promise(r => setTimeout(r, pollInterval));
+    await sleep(intervalMs);
 
-    const tokenRes = await fetch(config.tokenUrl, {
+    const tokRes = await fetch(`${host}/oauth2/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-        device_code,
-        client_id: config.clientId,
+        client_id: CLIENT_ID,
+        user_code: data.user_code,
+        code_verifier: codeVerifier,
       }),
     });
 
-    if (tokenRes.ok) {
-      return (await tokenRes.json()) as OAuthTokens;
+    if (!tokRes.ok) {
+      throw new CLIError(
+        `Device-code authorization failed (HTTP ${tokRes.status}).`,
+        ExitCode.AUTH,
+      );
     }
 
-    const err = (await tokenRes.json()) as { error: string };
-    if (err.error === 'authorization_pending') continue;
-    if (err.error === 'slow_down') {
-      await new Promise(r => setTimeout(r, 5000));
-      continue;
+    const tok = (await tokRes.json()) as TokenResponse;
+    if (tok.status === 'pending') continue;
+    if (tok.status === 'success' && tok.access_token) {
+      return {
+        access_token: tok.access_token,
+        refresh_token: tok.refresh_token ?? '',
+        expires_at: new Date(tok.expired_in ?? Date.now()).toISOString(),
+        region,
+        resource_url: tok.resource_url,
+      };
     }
-
-    throw new CLIError(
-      `Device code authorization failed: ${err.error}`,
-      ExitCode.AUTH,
-    );
+    throw new CLIError(`Device-code authorization failed: ${tok.status}`, ExitCode.AUTH);
   }
 
-  throw new CLIError('Device code authorization timed out.', ExitCode.TIMEOUT);
+  throw new CLIError('Device-code authorization timed out.', ExitCode.TIMEOUT);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+/**
+ * Open `url` in the user's default browser without going through a shell.
+ * Using execFile/spawn (not exec) avoids shell-injection via crafted URLs (#79).
+ */
+function openBrowser(url: string): void {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { execFile, spawn } = require('child_process') as typeof import('child_process');
+  if (process.platform === 'darwin') {
+    execFile('open', [url]);
+  } else if (process.platform === 'win32') {
+    spawn('cmd.exe', ['/c', 'start', '', url], { shell: false, detached: true });
+  } else {
+    execFile('xdg-open', [url]);
+  }
 }

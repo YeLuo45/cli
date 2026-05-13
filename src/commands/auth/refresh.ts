@@ -31,13 +31,14 @@ export default defineCommand({
       return;
     }
 
-    const tokens = await refreshAccessToken(creds.refresh_token);
+    const fresh = await refreshAccessToken(creds.refresh_token, creds.region ?? 'global');
 
     const updated: CredentialFile = {
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-      token_type: 'Bearer',
+      access_token: fresh.access_token,
+      refresh_token: fresh.refresh_token,
+      expires_at: fresh.expires_at,
+      region: creds.region,
+      resource_url: fresh.resource_url ?? creds.resource_url,
       account: creds.account,
     };
 

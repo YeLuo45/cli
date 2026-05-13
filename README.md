@@ -45,7 +45,10 @@ npm install -g mmx-cli
 ## Quick Start
 
 ```bash
-# Authenticate
+# Authenticate (interactive — choose MiniMax OAuth or paste an API key)
+mmx auth login
+
+# Or non-interactive
 mmx auth login --api-key sk-xxxxx
 
 # Start creating
@@ -130,16 +133,21 @@ mmx search query --q "latest news" --output json
 ### `mmx auth`
 
 ```bash
-mmx auth login --api-key sk-xxxxx
-mmx auth login                    # OAuth browser flow
+mmx auth login                              # interactive: pick OAuth (Global / China) or paste an API key
+mmx auth login --api-key sk-xxxxx           # save an API key directly
+mmx auth login --recommend                  # skip the menu, pick OAuth region interactively
+mmx auth login --recommend --region=global  # OAuth → api.minimax.io
+mmx auth login --recommend --region=cn      # OAuth → api.minimaxi.com
 mmx auth status
 mmx auth refresh
 mmx auth logout
 ```
 
 `mmx auth status` is the canonical way to verify active authentication.
-`~/.mmx/credentials.json` exists only for OAuth login. API-key login persists to
-`~/.mmx/config.json` (and `--api-key` can also be passed per command).
+Both OAuth and API-key credentials live in `~/.mmx/config.json` (the two are
+mutually exclusive — logging in with one method clears the other). API keys
+can also be passed per command via `--api-key`. With an API key, the region
+is auto-detected by probing both Global and CN.
 
 ### `mmx config` · `mmx quota`
 

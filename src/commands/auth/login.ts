@@ -1,20 +1,20 @@
 import { defineCommand } from '../../command';
 import { CLIError } from '../../errors/base';
 import { ExitCode } from '../../errors/codes';
-import { saveCredentials } from '../../auth/credentials';
-import { startBrowserFlow, startDeviceCodeFlow } from '../../auth/oauth';
+import { pickAuthMethod, pickOAuthRegion, runOAuthLogin } from '../../auth/setup';
 import { requestJson } from '../../client/http';
 import { quotaEndpoint } from '../../client/endpoints';
 import { renderQuotaTable } from '../../output/quota-table';
+import { detectRegion } from '../../config/detect-region';
 
 import { getConfigPath } from '../../config/paths';
 import { readConfigFile, writeConfigFile } from '../../config/loader';
 import { isInteractive } from '../../utils/env';
 import { maskToken } from '../../utils/token';
-import type { Config } from '../../config/schema';
+import type { Config, Region } from '../../config/schema';
+import { REGIONS } from '../../config/schema';
 import type { GlobalFlags } from '../../types/flags';
-import type { CredentialFile } from '../../auth/types';
-import type { QuotaResponse, QuotaModelRemain } from '../../types/api';
+import type { QuotaModelRemain } from '../../types/api';
 
 interface QuotaApiResponse {
   model_remains: QuotaModelRemain[];
@@ -30,33 +30,44 @@ async function showQuotaAfterLogin(config: Config): Promise<void> {
   }
 }
 
+/**
+ * Mirrors the `mmx` (no-args) dashboard: prints the help panel
+ * followed by the quota snapshot. Used right after a successful
+ * login so the user lands somewhere useful instead of an empty prompt.
+ */
+async function showDashboardAfterLogin(config: Config): Promise<void> {
+  const { registry } = await import('../../registry');
+  registry.printHelp([], process.stderr, config.region);
+  await showQuotaAfterLogin(config);
+}
+
 export default defineCommand({
   name: 'auth login',
   description: 'Authenticate via OAuth or API key',
-  usage: 'mmx auth login [--method oauth|api-key] [--api-key <key>] [--no-browser]',
+  usage: 'mmx auth login [--api-key <key>] [--recommend] [--region=global|cn]',
   options: [
-    { flag: '--method <method>', description: 'Auth method: oauth (default), api-key' },
-    { flag: '--api-key <key>', description: 'API key to store' },
-    { flag: '--no-browser', description: 'Use device-code flow instead of browser' },
+    { flag: '--api-key <key>', description: 'Skip the menu and save this API key directly' },
+    { flag: '--recommend',     description: 'Skip the menu, go straight to OAuth (combine with --region= to skip the region picker)' },
   ],
   examples: [
     'mmx auth login',
-    'mmx auth login --no-browser',
-    'mmx auth login --api-key sk-xxxxx',
-    'mmx auth login --method api-key --api-key sk-xxxxx',
+    'mmx auth login --api-key sk-cp-xxxxx',
+    'mmx auth login --recommend',
+    'mmx auth login --recommend --region=global',
+    'mmx auth login --recommend --region=cn',
   ],
   async run(config: Config, flags: GlobalFlags) {
     const envKey = process.env.MINIMAX_API_KEY;
     if (envKey && !flags.apiKey) {
-      const maskedEnvKey = maskToken(envKey);
+      const masked = maskToken(envKey);
       if (isInteractive({ nonInteractive: config.nonInteractive })) {
-        const { confirm } = await import('@clack/prompts');
+        const { confirm, isCancel } = await import('@clack/prompts');
         const proceed = await confirm({
-          message: `Detected MINIMAX_API_KEY in environment (${maskedEnvKey}).\nYou are already authenticated via env.\nDo you still want to configure local persistent credentials?`,
+          message: `MINIMAX_API_KEY is set (${masked}). Configure persistent credentials anyway?`,
           initialValue: false,
         });
-        if (!proceed) {
-          process.stdout.write('Login skipped. Using environment variables.\n');
+        if (isCancel(proceed) || !proceed) {
+          process.stdout.write('Login skipped. Using environment variable.\n');
           process.exit(0);
         }
       } else {
@@ -64,72 +75,92 @@ export default defineCommand({
       }
     }
 
-    const method = flags.apiKey ? 'api-key' : (flags.method as string) || 'oauth';
-
-    if (method === 'api-key') {
-      const key = (flags.apiKey as string) || config.apiKey;
-      if (!key) {
-        throw new CLIError(
-          '--api-key is required when using --method api-key.',
-          ExitCode.USAGE,
-          'mmx auth login --api-key sk-xxxxx',
-        );
-      }
-
-      // Validate the key by calling quota endpoint
-      if (!config.dryRun) {
-        process.stderr.write('Testing key... ');
-        try {
-          const testConfig = { ...config, apiKey: key };
-          await requestJson<QuotaResponse>(testConfig, {
-            url: quotaEndpoint(testConfig.baseUrl),
-          });
-          process.stderr.write('Valid\n');
-        } catch {
-          throw new CLIError(
-            'API key validation failed.',
-            ExitCode.AUTH,
-            'Check that your key is valid and belongs to a Token Plan.',
-          );
-        }
-
-        // Store key in config.json
-        const existing = readConfigFile() as Record<string, unknown>;
-        existing.api_key = key;
-        await writeConfigFile(existing);
-        process.stderr.write(`API key saved to ${getConfigPath()}\n`);
-
-        await showQuotaAfterLogin({ ...config, apiKey: key });
-      } else {
-        console.log('Would validate and save API key.');
-      }
+    if (flags.apiKey) {
+      await loginWithApiKey(config, flags.apiKey as string);
       return;
     }
 
-    // OAuth flow
     if (config.dryRun) {
-      console.log('Would start OAuth login flow.');
+      console.log('Would prompt for auth method (oauth-global, oauth-cn, api-key).');
       return;
     }
 
-    let tokens;
-    if (flags.noBrowser) {
-      tokens = await startDeviceCodeFlow();
-    } else {
-      tokens = await startBrowserFlow();
+    if (!isInteractive({ nonInteractive: config.nonInteractive })) {
+      throw new CLIError(
+        '--api-key is required in non-interactive mode.',
+        ExitCode.USAGE,
+        'mmx auth login --api-key sk-xxxxx',
+      );
     }
 
-    const creds: CredentialFile = {
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-      token_type: 'Bearer',
-    };
+    // --recommend: skip the 3-option menu, go straight to OAuth.
+    // With --region, skip the region picker too.
+    if (flags.recommend) {
+      const region = (flags.region as Region) || await pickOAuthRegion();
+      await completeOAuthLogin(config, region);
+      return;
+    }
 
-    await saveCredentials(creds);
-    process.stderr.write('Logged in successfully.\n');
-    process.stderr.write('Credentials saved to ~/.mmx/credentials.json\n');
+    const choice = await pickAuthMethod();
+    if (choice === 'api-key') {
+      const { text, isCancel } = await import('@clack/prompts');
+      const key = await text({
+        message: 'Paste your MiniMax API key:',
+        validate: (v) => (v && v.length > 0 ? undefined : 'API key cannot be empty.'),
+      });
+      if (isCancel(key)) throw new CLIError('Authentication cancelled.', ExitCode.AUTH);
+      await loginWithApiKey(config, key as string);
+      return;
+    }
 
-    await showQuotaAfterLogin({ ...config, apiKey: creds.access_token });
+    const region: Region = (flags.region as Region) || (choice === 'oauth-cn' ? 'cn' : 'global');
+    await completeOAuthLogin(config, region);
   },
 });
+
+async function completeOAuthLogin(config: Config, region: Region): Promise<void> {
+  await runOAuthLogin(region);
+
+  // Reload so the OAuth subobject (and any resource_url override) is picked up.
+  const fresh = readConfigFile();
+  const cfg: Config = {
+    ...config,
+    region,
+    baseUrl: fresh.oauth?.resource_url || REGIONS[region],
+  };
+  await showDashboardAfterLogin(cfg);
+}
+
+async function loginWithApiKey(config: Config, key: string): Promise<void> {
+  if (config.dryRun) {
+    console.log('Would validate and save API key.');
+    return;
+  }
+
+  // Probe both regions and pick the one the key actually authenticates against.
+  // This doubles as key validation — if neither region accepts it, the key is bad.
+  const detected = await detectRegion(key);
+  const cfg: Config = { ...config, region: detected, baseUrl: REGIONS[detected], apiKey: key };
+
+  // Verify the detection actually authorizes the quota endpoint (defends against
+  // detectRegion's graceful 'global' fallback when the network is unreachable).
+  try {
+    await requestJson<QuotaApiResponse>(cfg, { url: quotaEndpoint(cfg.baseUrl) });
+  } catch {
+    throw new CLIError(
+      'API key validation failed.',
+      ExitCode.AUTH,
+      'Check that your key is valid and belongs to a Token Plan.',
+    );
+  }
+
+  // OAuth and api_key are mutually exclusive — drop any stale oauth block.
+  const existing = readConfigFile() as Record<string, unknown>;
+  delete existing.oauth;
+  existing.api_key = key;
+  existing.region = detected;
+  await writeConfigFile(existing);
+  process.stderr.write(`API key saved to ${getConfigPath()}\n`);
+
+  await showDashboardAfterLogin(cfg);
+}
