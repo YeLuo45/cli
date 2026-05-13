@@ -18,6 +18,77 @@ import { readFileSync } from 'fs';
 import { isInteractive } from '../../utils/env';
 import { promptText, failIfMissing } from '../../utils/prompt';
 
+// ---------------------------------------------------------------------------
+// Thinking indicator — dynamic spinner + color-cycling label
+// ---------------------------------------------------------------------------
+
+const BRAILLE = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60)       { r = c; g = x; }
+  else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; }
+  else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; }
+  else              { r = c; b = x; }
+  return [
+    Math.round((r + m) * 255),
+    Math.round((g + m) * 255),
+    Math.round((b + m) * 255),
+  ];
+}
+
+class ThinkingIndicator {
+  private frame = 0;
+  private startTime = 0;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private out: NodeJS.WriteStream;
+  private noColor: boolean;
+
+  constructor(out: NodeJS.WriteStream, noColor: boolean) {
+    this.out = out;
+    this.noColor = noColor;
+  }
+
+  start(): void {
+    this.frame = 0;
+    this.startTime = Date.now();
+    this.tick();
+    this.timer = setInterval(() => this.tick(), 80);
+  }
+
+  stop(): void {
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    this.out.write('\r\x1b[0K');
+  }
+
+  private tick(): void {
+    const ch = BRAILLE[this.frame % BRAILLE.length];
+    const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+    const label = elapsed >= 60
+      ? `Thinking (${Math.floor(elapsed / 60)}m ${elapsed % 60}s)`
+      : `Thinking (${elapsed}s)`;
+
+    this.frame++;
+
+    if (this.noColor) {
+      this.out.write(`\r${ch} ${label}\x1b[0K`);
+    } else {
+      const [rs, gs, bs] = hslToRgb((this.frame * 17) % 360, 0.85, 0.55);
+      // Hue-shift the spinner slightly ahead of the label for contrast
+      const [rl, gl, bl] = hslToRgb(((this.frame * 17) + 40) % 360, 0.85, 0.55);
+      this.out.write(
+        `\r\x1b[38;2;${rs};${gs};${bs}m${ch}\x1b[0m ` +
+        `\x1b[38;2;${rl};${gl};${bl}m${label}\x1b[0m\x1b[0K`,
+      );
+    }
+  }
+}
+
 interface ParsedMessages {
   system?: string;
   messages: ChatMessage[];
@@ -196,10 +267,10 @@ export default defineCommand({
       const reset = config.noColor ? '' : '\x1b[0m';
       const isJsonOutput = format === 'json';
       const isTTY = process.stdout.isTTY;
-      // In TTY mode, write thinking/response headers to stdout for display.
-      // In non-TTY (pipe/agent) mode, write everything but final text to stderr.
-      const statusOut = isTTY && !isJsonOutput ? process.stdout : process.stderr;
+      const statusOut = isTTY && !isJsonOutput ? process.stderr : process.stderr;
       const resultOut = isJsonOutput ? undefined : process.stdout;
+
+      const think = new ThinkingIndicator(statusOut, config.noColor);
 
       for await (const event of parseSSE(res)) {
         if (event.data === '[DONE]') break;
@@ -209,25 +280,26 @@ export default defineCommand({
           if (parsed.type === 'content_block_start') {
             if (parsed.content_block.type === 'thinking') {
               inThinking = true;
-              statusOut.write(`${dim}Thinking:\n`);
+              think.start();
             } else if (parsed.content_block.type === 'text' && inThinking) {
-              statusOut.write(`${reset}\n\nResponse:\n`);
+              think.stop();
               inThinking = false;
+              statusOut.write(`${reset}\nResponse:\n`);
             }
           } else if (parsed.type === 'content_block_delta') {
             if (parsed.delta.type === 'text_delta') {
               textContent += parsed.delta.text;
               resultOut?.write(parsed.delta.text);
-            } else if (parsed.delta.type === 'thinking_delta') {
-              statusOut.write(parsed.delta.thinking);
             }
+            // thinking_delta is intentionally ignored — the dynamic
+            // spinner conveys activity without dumping raw thought text.
           }
         } catch (err) {
           // Warn but don't crash — partial output is better than nothing
           process.stderr.write(`\n${dim}[warning] Failed to parse stream chunk: ${err instanceof Error ? err.message : String(err)}${reset}\n`);
         }
       }
-      if (inThinking) statusOut.write(reset);
+      if (inThinking) think.stop();
 
       if (format === 'json') {
         console.log(formatOutput({ content: textContent }, format));
