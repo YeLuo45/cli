@@ -6,6 +6,7 @@ import { MusicSDK } from "./music";
 import { SearchSDK } from "./search";
 import { VisionSDK } from "./vision";
 import { QuotaSDK } from "./quota";
+import { FileSDK } from "./file";
 import { Client } from "./client";
 import { MiniMaxSDKOptions } from "./types";
 
@@ -18,6 +19,7 @@ export class MiniMaxSDK extends Client {
   readonly search: SearchSDK;
   readonly vision: VisionSDK;
   readonly quota: QuotaSDK;
+  readonly file: FileSDK;
 
   constructor(options: MiniMaxSDKOptions) {
     super(options);
@@ -29,5 +31,6 @@ export class MiniMaxSDK extends Client {
     this.search = new SearchSDK(options);
     this.vision = new VisionSDK(options);
     this.quota = new QuotaSDK(options);
+    this.file = new FileSDK(options);
   }
 }
