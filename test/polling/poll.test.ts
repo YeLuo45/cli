@@ -32,6 +32,11 @@ function jsonRes(body: unknown): Response {
 
 const originalFetch = globalThis.fetch;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function setFetch(fn: any): void {
+  globalThis.fetch = fn as typeof globalThis.fetch;
+}
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
@@ -39,7 +44,10 @@ afterEach(() => {
 describe('poll', () => {
   it('completes when isComplete returns true', async () => {
     let callCount = 0;
-    globalThis.fetch = mock(() => { callCount++; return Promise.resolve(jsonRes({ status: 'Success', task_id: 'task-1' })); });
+    setFetch(mock(() => {
+      callCount++;
+      return Promise.resolve(jsonRes({ status: 'Success', task_id: 'task-1' }));
+    }));
 
     const { poll } = await import('../../src/polling/poll');
     const result = await poll(baseConfig, {
@@ -55,9 +63,9 @@ describe('poll', () => {
   });
 
   it('throws on isFailed with status message', async () => {
-    globalThis.fetch = mock(() =>
-      Promise.resolve(jsonRes({ status: 'Failed', base_resp: { status_code: 1, status_msg: 'Task error' } })),
-    );
+    setFetch(mock(() => Promise.resolve(
+      jsonRes({ status: 'Failed', base_resp: { status_code: 1, status_msg: 'Task error' } }),
+    )));
 
     const { poll } = await import('../../src/polling/poll');
     await expect(
@@ -73,7 +81,7 @@ describe('poll', () => {
   });
 
   it('throws on timeout', async () => {
-    globalThis.fetch = mock(() => Promise.resolve(jsonRes({ status: 'Processing' })));
+    setFetch(mock(() => Promise.resolve(jsonRes({ status: 'Processing' }))));
 
     const { poll } = await import('../../src/polling/poll');
     await expect(
@@ -89,7 +97,10 @@ describe('poll', () => {
 
   it('returns immediately when first request succeeds', async () => {
     let callCount = 0;
-    globalThis.fetch = mock(() => { callCount++; return Promise.resolve(jsonRes({ status: 'Success' })); });
+    setFetch(mock(() => {
+      callCount++;
+      return Promise.resolve(jsonRes({ status: 'Success' }));
+    }));
 
     const { poll } = await import('../../src/polling/poll');
     const result = await poll(baseConfig, {

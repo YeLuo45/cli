@@ -87,29 +87,21 @@ describe('VideoSDK.validateParams', () => {
 
   it('auto-selects SEF model when last_frame_image is provided', async () => {
     // Validation passes → tries network → fails with non-validation error
-    try {
-      await sdk.generate({
+    await expect(
+      sdk.generate({
         prompt: 'test',
         first_frame_image: 'data:image/png;base64,xxx',
         last_frame_image: 'data:image/png;base64,yyy',
-      });
-    } catch (err) {
-      const msg = (err as Error).message;
-      expect(msg).not.toContain('prompt');
-      expect(msg).not.toContain('last_frame');
-    }
+      }),
+    ).rejects.not.toThrow(/prompt|last_frame/);
   });
 
   it('auto-selects S2V model when subject_reference is provided', async () => {
-    try {
-      await sdk.generate({
+    await expect(
+      sdk.generate({
         prompt: 'test',
         subject_reference: [{ type: 'character', image: ['data:image/png;base64,zzz'] }],
-      });
-    } catch (err) {
-      const msg = (err as Error).message;
-      expect(msg).not.toContain('prompt');
-      expect(msg).not.toContain('subject');
-    }
+      }),
+    ).rejects.not.toThrow(/prompt|subject/);
   });
 });

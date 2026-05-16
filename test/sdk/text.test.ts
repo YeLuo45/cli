@@ -83,11 +83,8 @@ describe('TextSDK.validateParams', () => {
   });
 
   it('applies defaults for model and max_tokens', async () => {
-    // Valid input passes validation → fails on network, not validation
-    try {
-      await sdk.chat({ messages: [{ role: 'user', content: 'Hi' }] });
-    } catch (err) {
-      expect((err as Error).message).not.toContain('At least one message');
-    }
+    await expect(
+      sdk.chat({ messages: [{ role: 'user', content: 'Hi' }] }),
+    ).rejects.not.toThrow('At least one message');
   });
 });

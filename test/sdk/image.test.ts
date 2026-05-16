@@ -146,11 +146,8 @@ describe('ImageSDK.validateParams', () => {
   });
 
   it('accepts valid dimensions (passes validation, fails on network)', async () => {
-    try {
-      await sdk.generate({ prompt: 'test', width: 1024, height: 1024 });
-    } catch (err) {
-      expect((err as Error).message).not.toContain('width');
-      expect((err as Error).message).not.toContain('height');
-    }
+    await expect(
+      sdk.generate({ prompt: 'test', width: 1024, height: 1024 }),
+    ).rejects.not.toThrow(/width|height/);
   });
 });
