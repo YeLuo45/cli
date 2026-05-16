@@ -1,9 +1,11 @@
 import { describe, it, expect, mock, afterEach } from 'bun:test';
 import type { Config } from '../../src/config/schema';
 
-// Silence the spinner — purely visual, no impact on logic
+// Silence the spinner — purely visual, no impact on logic.
+// Must re-export all symbols so other test files don't break.
 mock.module('../../src/output/progress', () => ({
   createSpinner: () => ({ start: () => {}, stop: () => {}, update: () => {} }),
+  createProgressBar: () => ({ update: () => {}, finish: () => {} }),
 }));
 
 const baseConfig: Config = {
