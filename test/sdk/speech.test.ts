@@ -106,3 +106,15 @@ describe('SpeechSDK.save', () => {
     expect(() => sdk.save(response, '/tmp/test.mp3')).toThrow('missing audio data');
   });
 });
+
+describe('SpeechSDK.validateParams', () => {
+  const sdk = new SpeechSDK({ apiKey: 'sk-test', region: 'global' });
+
+  it('throws when text is missing', async () => {
+    await expect(sdk.synthesize({} as any)).rejects.toThrow('text is required');
+  });
+
+  it('throws when text is empty string', async () => {
+    await expect(sdk.synthesize({ text: '' })).rejects.toThrow('text is required');
+  });
+});
