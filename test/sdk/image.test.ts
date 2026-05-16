@@ -121,3 +121,36 @@ describe('ImageSDK.save', () => {
     unlinkSync(saved[0]!);
   });
 });
+
+describe('ImageSDK.validateParams', () => {
+  const sdk = new ImageSDK({ apiKey: 'sk-test', region: 'global' });
+
+  it('throws when width is provided without height', async () => {
+    await expect(sdk.generate({ prompt: 'test', width: 1024 })).rejects.toThrow('Both width and height must be provided');
+  });
+
+  it('throws when height is provided without width', async () => {
+    await expect(sdk.generate({ prompt: 'test', height: 1024 })).rejects.toThrow('Both width and height must be provided');
+  });
+
+  it('throws when width is below 512', async () => {
+    await expect(sdk.generate({ prompt: 'test', width: 256, height: 256 })).rejects.toThrow('must be between 512 and 2048');
+  });
+
+  it('throws when height is above 2048', async () => {
+    await expect(sdk.generate({ prompt: 'test', width: 1024, height: 4096 })).rejects.toThrow('must be between 512 and 2048');
+  });
+
+  it('throws when dimensions are not multiples of 8', async () => {
+    await expect(sdk.generate({ prompt: 'test', width: 1025, height: 1024 })).rejects.toThrow('must be a multiple of 8');
+  });
+
+  it('accepts valid dimensions (passes validation, fails on network)', async () => {
+    try {
+      await sdk.generate({ prompt: 'test', width: 1024, height: 1024 });
+    } catch (err) {
+      expect((err as Error).message).not.toContain('width');
+      expect((err as Error).message).not.toContain('height');
+    }
+  });
+});
