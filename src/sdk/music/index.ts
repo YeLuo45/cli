@@ -180,7 +180,7 @@ export class MusicSDK extends Client {
       throw new SDKError('lyrics is required', ExitCode.USAGE);
     }
 
-    const VALID_MODELS = ['music-2.6', 'music-2.6-free', 'music-2.5+', 'music-2.5'];
+    const VALID_MODELS = ['music-2.6', 'music-2.5+', 'music-2.5'];
     if (model && !VALID_MODELS.includes(model)) {
       throw new SDKError(
         `Invalid model: ${model}. Valid models are ${VALID_MODELS.join(', ')}.`, 

@@ -17,7 +17,7 @@ interface AuthChoice {
 const AUTH_CHOICES: AuthChoice[] = [
   { value: 'oauth-global', label: `MiniMax (OAuth login → ${stripScheme(REGIONS.global)})` },
   { value: 'oauth-cn',     label: `MiniMax (OAuth login → ${stripScheme(REGIONS.cn)})` },
-  { value: 'api-key',      label: 'API key' },
+  { value: 'api-key',      label: `API key (${stripScheme(REGIONS.global)} or ${stripScheme(REGIONS.cn)})` },
 ];
 
 function stripScheme(url: string): string {

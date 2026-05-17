@@ -58,7 +58,7 @@ describe('model resolution (flag > config default > fallback)', () => {
   });
 
   it('handles music model default', () => {
-    const model = resolveModel('defaultMusicModel', 'music-2.6-free', { ...baseConfig, defaultMusicModel: 'music-2.6' }, {});
+    const model = resolveModel('defaultMusicModel', 'music-2.6', { ...baseConfig, defaultMusicModel: 'music-2.6' }, {});
     expect(model).toBe('music-2.6');
   });
 });

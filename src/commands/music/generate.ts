@@ -15,7 +15,7 @@ import { musicGenerateModel } from './models';
 
 export default defineCommand({
   name: 'music generate',
-  description: 'Generate a song (music-2.6 / music-2.6-free / music-2.5+ / music-2.5)',
+  description: 'Generate a song (music-2.6 / music-2.5+ / music-2.5)',
   apiDocs: '/docs/api-reference/music-generation',
   usage: 'mmx music generate --prompt <text> (--lyrics <text> | --instrumental | --lyrics-optimizer) [--out <path>] [flags]',
   options: [
@@ -36,7 +36,7 @@ export default defineCommand({
     { flag: '--structure <text>', description: 'Song structure, e.g. "verse-chorus-verse-bridge-chorus"' },
     { flag: '--references <text>', description: 'Reference tracks or artists, e.g. "similar to Ed Sheeran"' },
     { flag: '--extra <text>', description: 'Additional fine-grained requirements not covered above' },
-    { flag: '--model <model>', description: 'Model: music-2.6 (recommended), music-2.6-free (default, unlimited), music-2.5+, or music-2.5.' },
+    { flag: '--model <model>', description: 'Model: music-2.6 (default), music-2.5+, or music-2.5.' },
     { flag: '--output-format <fmt>', description: 'Return format: hex (default, saved to file) or url (24h expiry, download promptly). When --stream, only hex.' },
     { flag: '--aigc-watermark', description: 'Embed AI-generated content watermark in audio for content provenance' },
     { flag: '--format <fmt>', description: `Audio format: ${formatList(MUSIC_FORMATS)} (default: mp3)` },
@@ -127,7 +127,7 @@ export default defineCommand({
     const outPath = (flags.out as string | undefined) ?? `music_${ts}.${ext}`;
 
     const model = (flags.model as string) || musicGenerateModel(config);
-    const VALID_MODELS = ['music-2.6', 'music-2.6-free', 'music-2.5+', 'music-2.5'];
+    const VALID_MODELS = ['music-2.6', 'music-2.5+', 'music-2.5'];
     if (flags.model && !VALID_MODELS.includes(model)) {
       throw new CLIError(
         `Invalid model "${model}". Valid models: ${VALID_MODELS.join(', ')}`,

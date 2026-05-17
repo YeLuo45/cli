@@ -7,15 +7,17 @@ import { tmpdir } from 'os';
 
 describe('credentials', () => {
   const testDir = join(tmpdir(), `mmx-test-${Date.now()}`);
-  const originalHome = process.env.HOME;
+  const originalConfigDir = process.env.MMX_CONFIG_DIR;
 
   beforeEach(() => {
-    mkdirSync(join(testDir, '.mmx'), { recursive: true });
-    process.env.HOME = testDir;
+    const configDir = join(testDir, '.mmx');
+    mkdirSync(configDir, { recursive: true });
+    process.env.MMX_CONFIG_DIR = configDir;
   });
 
   afterEach(() => {
-    process.env.HOME = originalHome;
+    if (originalConfigDir) process.env.MMX_CONFIG_DIR = originalConfigDir;
+    else delete process.env.MMX_CONFIG_DIR;
     if (existsSync(testDir)) {
       rmSync(testDir, { recursive: true, force: true });
     }
