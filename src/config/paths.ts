@@ -4,6 +4,7 @@ import { join } from 'path';
 const CONFIG_DIR_NAME = '.mmx';
 
 export function getConfigDir(): string {
+  if (process.env.MMX_CONFIG_DIR) return process.env.MMX_CONFIG_DIR;
   return join(homedir(), CONFIG_DIR_NAME);
 }
 

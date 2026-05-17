@@ -1,6 +1,9 @@
-import { describe, it, expect, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { resolveCredential } from '../../src/auth/resolver';
 import type { Config } from '../../src/config/schema';
+import { mkdirSync, rmSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
   return {
@@ -20,8 +23,20 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
 }
 
 describe('resolveCredential', () => {
+  const testDir = join(tmpdir(), `mmx-resolver-test-${Date.now()}`);
+  const originalConfigDir = process.env.MMX_CONFIG_DIR;
+
+  beforeEach(() => {
+    const configDir = join(testDir, '.mmx');
+    mkdirSync(configDir, { recursive: true });
+    process.env.MMX_CONFIG_DIR = configDir;
+  });
+
   afterEach(() => {
+    if (originalConfigDir) process.env.MMX_CONFIG_DIR = originalConfigDir;
+    else delete process.env.MMX_CONFIG_DIR;
     delete process.env.MINIMAX_API_KEY;
+    rmSync(testDir, { recursive: true, force: true });
   });
 
   it('resolves from flag (apiKey in config)', async () => {
