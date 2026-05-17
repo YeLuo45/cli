@@ -84,3 +84,55 @@ describe('MusicSDK.save', () => {
     expect(() => sdk.save(response, '/tmp/test.mp3')).toThrow('missing audio data');
   });
 });
+
+describe('MusicSDK.validateParams', () => {
+  const sdk = new MusicSDK({ apiKey: 'sk-test', region: 'global' });
+
+  it('throws when is_instrumental and lyrics are both provided', async () => {
+    await expect(
+      sdk.generate({ is_instrumental: true, lyrics: 'hello' } as any),
+    ).rejects.toThrow('Cannot use is_instrumental with lyrics');
+  });
+
+  it('throws when lyrics_optimizer is used with lyrics', async () => {
+    await expect(
+      sdk.generate({ lyrics_optimizer: true, lyrics: 'hello' } as any),
+    ).rejects.toThrow('Cannot use lyrics_optimizer with lyrics or is_instrumental');
+  });
+
+  it('throws when lyrics_optimizer is used with is_instrumental', async () => {
+    await expect(
+      sdk.generate({ lyrics_optimizer: true, is_instrumental: true } as any),
+    ).rejects.toThrow('Cannot use lyrics_optimizer with lyrics or is_instrumental');
+  });
+
+  it('throws when no prompt, lyrics, is_instrumental, or lyrics_optimizer', async () => {
+    await expect(
+      sdk.generate({} as any),
+    ).rejects.toThrow('At least one of prompt or lyrics or is_instrumental or lyrics_optimizer is required');
+  });
+
+  it('throws when lyrics is missing (not is_instrumental, not lyrics_optimizer)', async () => {
+    await expect(
+      sdk.generate({ prompt: 'Upbeat pop' } as any),
+    ).rejects.toThrow('lyrics is required');
+  });
+
+  it('throws on invalid model', async () => {
+    await expect(
+      sdk.generate({ prompt: 'Folk', lyrics: 'no lyrics', model: 'music-2.0' } as any),
+    ).rejects.toThrow('Invalid model');
+  });
+
+  it('throws on invalid output_format', async () => {
+    await expect(
+      sdk.generate({ prompt: 'Folk', lyrics: 'no lyrics', output_format: 'mp3' } as any),
+    ).rejects.toThrow('Invalid output format');
+  });
+
+  it('throws when stream and output_format=url are used together', async () => {
+    await expect(
+      sdk.generate({ prompt: 'Folk', lyrics: 'no lyrics', stream: true, output_format: 'url' } as any),
+    ).rejects.toThrow('stream and output_format url cannot be used together');
+  });
+});
