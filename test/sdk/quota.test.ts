@@ -4,7 +4,7 @@ import { MiniMaxSDK } from '../../src/sdk';
 describe('MiniMaxSDK.quota', () => {
   it('should get quota info successfully', async () => {
     const mockFetch = mock(async (url: string) => {
-      if (url.includes('/v1/token_plan/remains')) {
+      if (url.includes('/v1/api/openplatform/coding_plan/remains')) {
         return new Response(JSON.stringify({
           model_remains: [
             {
@@ -14,6 +14,7 @@ describe('MiniMaxSDK.quota', () => {
               remains_time: 1000,
               current_interval_total_count: 1000,
               current_interval_usage_count: 500,
+              current_interval_remaining_percent: 50,
               current_weekly_total_count: 5000,
               current_weekly_usage_count: 2000,
               weekly_start_time: 0,
