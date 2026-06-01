@@ -16,23 +16,34 @@ const BG_YELLOW = '\x1b[48;2;202;138;4m';
 const BG_RED = '\x1b[48;2;220;38;38m';
 const BG_EMPTY = '\x1b[48;2;55;65;81m';
 
-function usageColors(usedPct: number): [string, string] {
-  if (usedPct < 50) return [FG_GREEN, BG_GREEN];
-  if (usedPct <= 80) return [FG_YELLOW, BG_YELLOW];
+function remainingColors(remainingPct: number): [string, string] {
+  if (remainingPct >= 50) return [FG_GREEN, BG_GREEN];
+  if (remainingPct >= 20) return [FG_YELLOW, BG_YELLOW];
   return [FG_RED, BG_RED];
 }
 
 interface Labels {
   dashboard: string;
   week: string;
+  current: string;
   weekly: string;
   resetsIn: string;
   noData: string;
   now: string;
 }
 
-const LABELS_EN: Labels = { dashboard: 'TokenPlan Quota', week: 'Week', weekly: 'Weekly', resetsIn: 'Resets in', noData: 'No quota data available.', now: 'now' };
-const LABELS_CN: Labels = { dashboard: 'TokenPlan 配额面板', week: '周期', weekly: '每周', resetsIn: '重置于', noData: '暂无配额数据', now: '即将' };
+const LABELS_EN: Labels = { dashboard: 'TokenPlan Quota', week: 'Week', current: 'Left', weekly: 'Wk left', resetsIn: 'Reset', noData: 'No quota data available.', now: 'now' };
+const LABELS_CN: Labels = { dashboard: 'TokenPlan 配额面板', week: '周期', current: '剩余', weekly: '周剩余', resetsIn: '重置', noData: '暂无配额数据', now: '即将' };
+
+const MODEL_NAME_CN: Record<string, string> = {
+  'general': '通用',
+  'video': '视频',
+};
+
+function displayModelName(name: string, region: string): string {
+  if (region !== 'cn') return name;
+  return MODEL_NAME_CN[name] ?? name;
+}
 
 function formatDuration(ms: number, nowLabel: string): string {
   if (ms <= 0) return nowLabel;
@@ -60,15 +71,47 @@ function displayWidth(s: string): number {
 }
 
 const BAR_WIDTH = 16;
+const COMPACT_BAR_WIDTH = 10;
 
-function renderBar(usedPct: number, color: boolean): string {
-  const ratio = Math.max(0, Math.min(100, usedPct)) / 100;
-  const filled = Math.round(BAR_WIDTH * ratio);
-  const empty = BAR_WIDTH - filled;
-  const pctStr = `${usedPct}%`.padStart(4);
-  if (!color) return `[${'█'.repeat(filled)}${'.'.repeat(empty)}] ${pctStr}`;
-  const [fg, bg] = usageColors(usedPct);
-  return `${bg}${' '.repeat(filled)}${R}${BG_EMPTY}${' '.repeat(empty)}${R} ${fg}${B}${pctStr}${R}`;
+function clampPct(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function remainingPct(percent: number | undefined | null, remaining: number, total: number): number {
+  return percent !== undefined && percent !== null
+    ? clampPct(percent)
+    : total > 0 ? clampPct((remaining / total) * 100) : 0;
+}
+
+function renderBar(remainingPct: number, color: boolean, barWidth: number = BAR_WIDTH, showPct: boolean = true): string {
+  const pct = clampPct(remainingPct);
+  const ratio = pct / 100;
+  const filled = Math.round(barWidth * ratio);
+  const empty = barWidth - filled;
+  const pctStr = `${pct}%`.padStart(4);
+  if (!color) {
+    const bar = `[${'█'.repeat(filled)}${'.'.repeat(empty)}]`;
+    return showPct ? `${bar} ${pctStr}` : bar;
+  }
+  const [fg, bg] = remainingColors(pct);
+  const bar = `${bg}${' '.repeat(filled)}${R}${BG_EMPTY}${' '.repeat(empty)}${R}`;
+  return showPct ? `${bar} ${fg}${B}${pctStr}${R}` : bar;
+}
+
+function renderMetric(
+  label: string,
+  remaining: number,
+  total: number,
+  percent: number | undefined | null,
+  color: boolean,
+): string {
+  const pct = remainingPct(percent, remaining, total);
+  const bar = renderBar(pct, color, COMPACT_BAR_WIDTH, total <= 0);
+  if (total > 0) {
+    const count = `${remaining.toLocaleString()} / ${total.toLocaleString()}`;
+    return color ? `${D}${label}${R} ${bar} ${remainingColors(pct)[0]}${count}${R}` : `${label} ${bar} ${count}`;
+  }
+  return `${label} ${bar}`;
 }
 
 function boxLine(w: number, l: string, f: string, r: string, c: boolean): string {
@@ -84,9 +127,31 @@ export function renderQuotaTable(models: QuotaModelRemain[], config: Config): vo
   const useColor = !config.noColor && process.stdout.isTTY === true;
   const L = config.region === 'cn' ? LABELS_CN : LABELS_EN;
 
-  const maxNameLen = models.length > 0 ? Math.max(...models.map(m => m.model_name.length)) : 16;
-  const barVisLen = useColor ? BAR_WIDTH + 5 : BAR_WIDTH + 7;
-  const W = Math.max(68, maxNameLen + 2 + 15 + 2 + barVisLen + 2);
+  const rows = models.map((m) => {
+    const displayName = displayModelName(m.model_name, config.region);
+    const current = renderMetric(
+      L.current,
+      m.current_interval_usage_count,
+      m.current_interval_total_count,
+      m.current_interval_remaining_percent,
+      useColor,
+    );
+    const weekly = renderMetric(
+      L.weekly,
+      m.current_weekly_usage_count,
+      m.current_weekly_total_count,
+      m.current_weekly_remaining_percent,
+      useColor,
+    );
+    const reset = `${L.resetsIn} ${formatDuration(m.remains_time, L.now)}`;
+    return { displayName, current, weekly, reset };
+  });
+
+  const nameWidth = Math.max(6, ...rows.map(r => displayWidth(r.displayName)));
+  const currentWidth = Math.max(...rows.map(r => displayWidth(r.current)), 18);
+  const weeklyWidth = Math.max(...rows.map(r => displayWidth(r.weekly)), 18);
+  const resetWidth = Math.max(...rows.map(r => displayWidth(r.reset)), 10);
+  const W = Math.max(72, nameWidth + 2 + currentWidth + 2 + weeklyWidth + 2 + resetWidth + 4);
 
   const weekRange = models.length > 0
     ? `${formatDate(models[0]!.weekly_start_time)} — ${formatDate(models[0]!.weekly_end_time)}`
@@ -110,34 +175,15 @@ export function renderQuotaTable(models: QuotaModelRemain[], config: Config): vo
     return;
   }
 
-  for (const m of models) {
+  for (const row of rows) {
     console.log(boxLine(W, '├', '─', '┤', useColor));
 
-    const used = m.current_interval_usage_count;
-    const limit = m.current_interval_total_count;
-    const usedPct = limit > 0 ? Math.round((used / limit) * 100) : 0;
-    const weekUsed = m.current_weekly_usage_count;
-    const weekLimit = m.current_weekly_total_count;
-    const resets = formatDuration(m.remains_time, L.now);
-
-    const nameStr = m.model_name.padEnd(maxNameLen);
-    const usageFrac = `${used.toLocaleString()} / ${limit.toLocaleString()}`;
-    const bar = renderBar(usedPct, useColor);
-    const line1VisLen = maxNameLen + 2 + 15 + 2 + barVisLen;
-
-    const line1 = useColor
-      ? `${B}${nameStr}${R}  ${usageColors(usedPct)[0]}${usageFrac.padStart(15)}${R}  ${bar}`
-      : `${nameStr}  ${usageFrac.padStart(15)}  ${renderBar(usedPct, false)}`;
-    console.log(boxRow(line1, W, line1VisLen, useColor));
-
-    const subLeft = `└ ${L.weekly} ${weekUsed.toLocaleString()} / ${weekLimit.toLocaleString()}`;
-    const subRight = `${L.resetsIn} ${resets}`;
-    const subGap = Math.max(2, (W - 2) - 2 - displayWidth(subLeft) - displayWidth(subRight));
-    const subVisLen = 2 + displayWidth(subLeft) + subGap + displayWidth(subRight);
-    const sub = useColor
-      ? `  ${D}${subLeft}${' '.repeat(subGap)}${subRight}${R}`
-      : `  ${subLeft}${' '.repeat(subGap)}${subRight}`;
-    console.log(boxRow(sub, W, subVisLen, useColor));
+    const name = useColor ? `${B}${row.displayName}${R}` : row.displayName;
+    const line = `${name}${' '.repeat(Math.max(1, nameWidth - displayWidth(row.displayName) + 2))}` +
+      `${row.current}${' '.repeat(Math.max(1, currentWidth - displayWidth(row.current) + 2))}` +
+      `${row.weekly}${' '.repeat(Math.max(1, weeklyWidth - displayWidth(row.weekly) + 2))}` +
+      row.reset;
+    console.log(boxRow(line, W, displayWidth(line), useColor));
   }
 
   console.log(boxLine(W, '╰', '─', '╯', useColor));

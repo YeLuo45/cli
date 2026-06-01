@@ -37,6 +37,41 @@ function createModel(): QuotaModelRemain {
   };
 }
 
+function createCodingPlanModels(): QuotaModelRemain[] {
+  return [
+    {
+      model_name: 'general',
+      start_time: Date.UTC(2026, 4, 31, 0, 0, 0),
+      end_time: Date.UTC(2026, 4, 31, 2, 0, 0),
+      remains_time: 2 * 60 * 60 * 1000,
+      current_interval_total_count: 0,
+      current_interval_usage_count: 0,
+      current_interval_remaining_percent: 94,
+      current_weekly_total_count: 0,
+      current_weekly_usage_count: 0,
+      current_weekly_remaining_percent: 98,
+      weekly_start_time: Date.UTC(2026, 4, 31, 0, 0, 0),
+      weekly_end_time: Date.UTC(2026, 5, 7, 0, 0, 0),
+      weekly_remains_time: 6 * 24 * 60 * 60 * 1000,
+    },
+    {
+      model_name: 'video',
+      start_time: Date.UTC(2026, 4, 31, 0, 0, 0),
+      end_time: Date.UTC(2026, 5, 1, 0, 0, 0),
+      remains_time: 6 * 60 * 60 * 1000,
+      current_interval_total_count: 3,
+      current_interval_usage_count: 3,
+      current_interval_remaining_percent: 100,
+      current_weekly_total_count: 21,
+      current_weekly_usage_count: 21,
+      current_weekly_remaining_percent: 100,
+      weekly_start_time: Date.UTC(2026, 4, 31, 0, 0, 0),
+      weekly_end_time: Date.UTC(2026, 5, 7, 0, 0, 0),
+      weekly_remains_time: 6 * 24 * 60 * 60 * 1000,
+    },
+  ];
+}
+
 describe('renderQuotaTable', () => {
   it('does not force model names to white in color mode', () => {
     const lines: string[] = [];
@@ -64,5 +99,34 @@ describe('renderQuotaTable', () => {
 
     expect(output).toContain('MiniMax-M2');
     expect(output).not.toContain(WHITE_ANSI);
+  });
+
+  it('renders coding plan remaining quotas without deriving counts from percent', () => {
+    const lines: string[] = [];
+    const originalLog = console.log;
+
+    console.log = (message?: unknown) => {
+      lines.push(String(message ?? ''));
+    };
+
+    try {
+      renderQuotaTable(createCodingPlanModels(), {
+        ...createConfig(),
+        region: 'cn',
+        noColor: true,
+      });
+    } finally {
+      console.log = originalLog;
+    }
+
+    const output = lines.join('\n');
+
+    expect(output).toContain('通用');
+    expect(output).toContain('剩余 [█████████.]  94%');
+    expect(output).toContain('周剩余 [██████████]  98%');
+    expect(output).toContain('视频');
+    expect(output).toContain('3 / 3');
+    expect(output).toContain('21 / 21');
+    expect(output).not.toContain('0 / 3');
   });
 });
