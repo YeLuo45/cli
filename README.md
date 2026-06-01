@@ -144,10 +144,17 @@ mmx auth logout
 ```
 
 `mmx auth status` is the canonical way to verify active authentication.
-Both OAuth and API-key credentials live in `~/.mmx/config.json` (the two are
-mutually exclusive — logging in with one method clears the other). API keys
-can also be passed per command via `--api-key`. With an API key, the region
-is auto-detected by probing both Global and CN.
+
+**OAuth** uses the [Device Authorization Grant (RFC 8628)](https://tools.ietf.org/html/rfc8628) with PKCE —
+the CLI opens your browser, you enter a code, and `access_token` + `refresh_token`
+are saved to `~/.mmx/config.json`. Tokens refresh automatically (5-min buffer);
+manual refresh via `mmx auth refresh`.
+
+**API key** auth auto-detects the correct region by probing both Global and CN.
+Useful for CI/CD (`mmx auth login --api-key sk-xxxxx`), or pass per-command via `--api-key`.
+
+OAuth and API key are mutually exclusive — logging in with one clears the other.
+Credential priority: `--api-key` flag > OAuth (config) > `api_key` (config).
 
 ### `mmx config` · `mmx quota`
 
