@@ -130,6 +130,8 @@ mmx search "MiniMax AI"
 mmx search query --q "最新动态" --output json
 ```
 
+> `/v1/coding_plan/search` 接口单次最多返回 10 条结果，目前不支持翻页参数（参见 #107）。如需不同结果，请调整查询关键词。
+
 ### `mmx auth`
 
 ```bash

@@ -130,6 +130,8 @@ mmx search "MiniMax AI"
 mmx search query --q "latest news" --output json
 ```
 
+> The `/v1/coding_plan/search` API returns at most 10 results per call and does not currently expose a pagination parameter (see #107). Refine your query if you need different results.
+
 ### `mmx auth`
 
 ```bash

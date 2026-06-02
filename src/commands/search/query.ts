@@ -20,7 +20,11 @@ interface SearchResponse {
 
 export default defineCommand({
   name: 'search query',
-  description: 'Search the web via MiniMax',
+  description:
+    'Search the web via MiniMax. ' +
+    'Note: the underlying /v1/coding_plan/search API returns at most 10 ' +
+    'results per call and does not currently support pagination, so ' +
+    'refining your --q is the only way to see different results.',
   usage: 'mmx search query --q <query>',
   options: [
     { flag: '--q <query>', description: 'Search query string' },
