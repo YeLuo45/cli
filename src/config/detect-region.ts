@@ -1,7 +1,7 @@
 import { REGIONS, type Region } from "./schema";
 import { readConfigFile, writeConfigFile } from "./loader";
 
-const QUOTA_PATH = "/v1/api/openplatform/coding_plan/remains";
+const QUOTA_PATH = "/v1/token_plan/remains";
 
 function quotaUrl(region: Region): string {
   return REGIONS[region] + QUOTA_PATH;
