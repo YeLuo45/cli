@@ -4,7 +4,7 @@ import { MiniMaxSDK } from '../../src/sdk';
 describe('MiniMaxSDK.quota', () => {
   it('should get quota info successfully', async () => {
     const mockFetch = mock(async (url: string) => {
-      if (url.includes('/v1/api/openplatform/coding_plan/remains')) {
+      if (url.includes('/v1/token_plan/remains')) {
         return new Response(JSON.stringify({
           model_remains: [
             {

@@ -29,7 +29,7 @@ describe('detect-region: probeRegion auth style fallback', () => {
   it('succeeds when endpoint only accepts Bearer token', async () => {
     server = createMockServer({
       routes: {
-        '/v1/api/openplatform/coding_plan/remains': (req) => {
+        '/v1/token_plan/remains': (req) => {
           if (req.headers.get('Authorization') === 'Bearer bearer-only-key') {
             return jsonResponse({ base_resp: { status_code: 0 } });
           }
@@ -55,7 +55,7 @@ describe('detect-region: probeRegion auth style fallback', () => {
   it('succeeds when endpoint only accepts x-api-key header', async () => {
     server = createMockServer({
       routes: {
-        '/v1/api/openplatform/coding_plan/remains': (req) => {
+        '/v1/token_plan/remains': (req) => {
           if (req.headers.get('x-api-key') === 'xapikey-only-key') {
             return jsonResponse({ base_resp: { status_code: 0 } });
           }
@@ -80,7 +80,7 @@ describe('detect-region: probeRegion auth style fallback', () => {
   it('falls back to global when key is invalid for all auth styles and regions', async () => {
     server = createMockServer({
       routes: {
-        '/v1/api/openplatform/coding_plan/remains': () =>
+        '/v1/token_plan/remains': () =>
           jsonResponse({ error: 'unauthorized' }, 401),
       },
     });
