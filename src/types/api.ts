@@ -256,9 +256,16 @@ export interface QuotaModelRemain {
   current_weekly_total_count: number;
   current_weekly_usage_count: number;
   current_weekly_remaining_percent?: number;
+  // Server-side status. 1 = normal (limited), 2 = exhausted, 3 = unlimited.
+  current_interval_status?: number;
+  current_weekly_status?: number;
   weekly_start_time: number;
   weekly_end_time: number;
   weekly_remains_time: number;
+  // Weekly display multiplier in permille (1/1000). The server returns the
+  // base weekly remaining percent and a separate boost factor; the rendered
+  // weekly value is base × (boost_permille / 1000). 1500 ⇒ display up to 150%.
+  weekly_boost_permille?: number;
 }
 
 // ---- File ----
