@@ -129,4 +129,128 @@ describe('renderQuotaTable', () => {
     expect(output).toContain('21 / 21');
     expect(output).not.toContain('0 / 3');
   });
+
+  it('applies weekly_boost_permille (1500 ⇒ up to 150%) when rendering weekly percent', () => {
+    const lines: string[] = [];
+    const originalLog = console.log;
+
+    console.log = (message?: unknown) => {
+      lines.push(String(message ?? ''));
+    };
+
+    try {
+      renderQuotaTable(
+        [
+          {
+            ...createModel(),
+            current_weekly_total_count: 0,
+            current_weekly_usage_count: 0,
+            current_weekly_remaining_percent: 100,
+            weekly_boost_permille: 1500,
+          },
+        ],
+        { ...createConfig(), noColor: true },
+      );
+    } finally {
+      console.log = originalLog;
+    }
+
+    const output = lines.join('\n');
+    expect(output).toContain('Wk left [██████████] 150%');
+  });
+
+  it('clamps boosted weekly percent at MAX_DISPLAY_PCT (200)', () => {
+    const lines: string[] = [];
+    const originalLog = console.log;
+
+    console.log = (message?: unknown) => {
+      lines.push(String(message ?? ''));
+    };
+
+    try {
+      renderQuotaTable(
+        [
+          {
+            ...createModel(),
+            current_weekly_total_count: 0,
+            current_weekly_usage_count: 0,
+            current_weekly_remaining_percent: 100,
+            weekly_boost_permille: 3000,
+          },
+        ],
+        { ...createConfig(), noColor: true },
+      );
+    } finally {
+      console.log = originalLog;
+    }
+
+    const output = lines.join('\n');
+    expect(output).toContain('200%');
+    expect(output).not.toContain('300%');
+  });
+
+  it('renders "无限" for weekly when status=3 (CN region)', () => {
+    const lines: string[] = [];
+    const originalLog = console.log;
+
+    console.log = (message?: unknown) => {
+      lines.push(String(message ?? ''));
+    };
+
+    try {
+      renderQuotaTable(
+        [
+          {
+            ...createModel(),
+            current_weekly_total_count: 0,
+            current_weekly_usage_count: 0,
+            current_weekly_remaining_percent: 100,
+            current_weekly_status: 3,
+            weekly_boost_permille: 1500,
+          },
+        ],
+        { ...createConfig(), region: 'cn', noColor: true },
+      );
+    } finally {
+      console.log = originalLog;
+    }
+
+    const output = lines.join('\n');
+    expect(output).toContain('[██████████]');
+    expect(output).toContain('周剩余');
+    expect(output).toContain('无限');
+    expect(output).not.toContain('150%');
+  });
+
+  it('renders "unlimited" for weekly when status=3 (global region)', () => {
+    const lines: string[] = [];
+    const originalLog = console.log;
+
+    console.log = (message?: unknown) => {
+      lines.push(String(message ?? ''));
+    };
+
+    try {
+      renderQuotaTable(
+        [
+          {
+            ...createModel(),
+            current_weekly_total_count: 0,
+            current_weekly_usage_count: 0,
+            current_weekly_remaining_percent: 100,
+            current_weekly_status: 3,
+          },
+        ],
+        { ...createConfig(), noColor: true },
+      );
+    } finally {
+      console.log = originalLog;
+    }
+
+    const output = lines.join('\n');
+    expect(output).toContain('[██████████]');
+    expect(output).toContain('Wk left');
+    expect(output).toContain('unlimited');
+    expect(output).not.toContain('100%');
+  });
 });

@@ -73,19 +73,42 @@ function displayWidth(s: string): number {
 const BAR_WIDTH = 16;
 const COMPACT_BAR_WIDTH = 10;
 
-function clampPct(value: number): number {
-  return Math.max(0, Math.min(100, Math.round(value)));
+// Display ceiling. Server returns base percent (0–100) plus a `weekly_boost_permille`
+// multiplier; a typical boosted plan shows up to 150%, so cap the rendered value
+// at 200% to leave headroom and keep the bar/text readable.
+const MAX_DISPLAY_PCT = 200;
+
+// Weekly quota is unlimited when the server reports `current_weekly_status: 3`
+// (per the status enum: 1=normal, 2=exhausted, 3=unlimited).
+function isUnweekly(status: number | undefined | null): boolean {
+  return status === 3;
 }
 
-function remainingPct(percent: number | undefined | null, remaining: number, total: number): number {
-  return percent !== undefined && percent !== null
-    ? clampPct(percent)
-    : total > 0 ? clampPct((remaining / total) * 100) : 0;
+function clampPct(value: number): number {
+  return Math.max(0, Math.min(MAX_DISPLAY_PCT, Math.round(value)));
+}
+
+function boostFactor(boostPermille: number | undefined | null): number {
+  if (boostPermille === undefined || boostPermille === null) return 1;
+  return Math.max(0, boostPermille) / 1000;
+}
+
+function remainingPct(
+  percent: number | undefined | null,
+  remaining: number,
+  total: number,
+  boostPermille?: number | null,
+): number {
+  const factor = boostFactor(boostPermille);
+  if (percent !== undefined && percent !== null) {
+    return clampPct(percent * factor);
+  }
+  return total > 0 ? clampPct((remaining / total) * 100 * factor) : 0;
 }
 
 function renderBar(remainingPct: number, color: boolean, barWidth: number = BAR_WIDTH, showPct: boolean = true): string {
   const pct = clampPct(remainingPct);
-  const ratio = pct / 100;
+  const ratio = Math.min(1, pct / 100);
   const filled = Math.round(barWidth * ratio);
   const empty = barWidth - filled;
   const pctStr = `${pct}%`.padStart(4);
@@ -98,14 +121,31 @@ function renderBar(remainingPct: number, color: boolean, barWidth: number = BAR_
   return showPct ? `${bar} ${fg}${B}${pctStr}${R}` : bar;
 }
 
+const UNLIMITED_SYMBOL = '∞';
+const UNLIMITED_LABEL_CN = '无限';
+const UNLIMITED_LABEL_EN = 'unlimited';
+
 function renderMetric(
   label: string,
   remaining: number,
   total: number,
   percent: number | undefined | null,
   color: boolean,
+  boostPermille?: number | null,
+  unlimited?: boolean,
+  unlimitedLabel?: string,
 ): string {
-  const pct = remainingPct(percent, remaining, total);
+  if (unlimited) {
+    const ul = unlimitedLabel ?? UNLIMITED_SYMBOL;
+    const ulStr = ul.padStart(4);
+    if (color) {
+      const bar = `${BG_GREEN}${' '.repeat(COMPACT_BAR_WIDTH)}${R}`;
+      return `${D}${label}${R} ${bar} ${FG_GREEN}${B}${ulStr}${R}`;
+    }
+    const bar = `[${'█'.repeat(COMPACT_BAR_WIDTH)}]`;
+    return `${label} ${bar} ${ulStr}`;
+  }
+  const pct = remainingPct(percent, remaining, total, boostPermille);
   const bar = renderBar(pct, color, COMPACT_BAR_WIDTH, total <= 0);
   if (total > 0) {
     const count = `${remaining.toLocaleString()} / ${total.toLocaleString()}`;
@@ -142,6 +182,9 @@ export function renderQuotaTable(models: QuotaModelRemain[], config: Config): vo
       m.current_weekly_total_count,
       m.current_weekly_remaining_percent,
       useColor,
+      m.weekly_boost_permille,
+      isUnweekly(m.current_weekly_status),
+      config.region === 'cn' ? UNLIMITED_LABEL_CN : UNLIMITED_LABEL_EN,
     );
     const reset = `${L.resetsIn} ${formatDuration(m.remains_time, L.now)}`;
     return { displayName, current, weekly, reset };
